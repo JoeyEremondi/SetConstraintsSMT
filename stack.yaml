@@ -1,0 +1,9 @@
+flags: {}
+extra-package-dbs: []
+packages:
+- '.'
+extra-deps:
+- FloatingHex-0.4
+- crackNum-1.9
+- simple-smt-0.7.1
+resolver: lts-9.12

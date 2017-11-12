@@ -5,9 +5,12 @@ import Syntax
 
 main :: IO ()
 main = do
-  let cset = [(Var "L") `Sub` (Var "L" `Union` Var "L")]
+  let cset =
+        [ (Var "L") `Sub` (FunApp "nil" [])
+        , (Var "L") `Sub` (FunApp "cons" [Var "L"])
+        ]
   l <- SMT.newLogger 0
-  s <- SMT.newSolver "cvc4" ["--lang=smt2"] (Just l)
+  s <- SMT.newSolver "z3" ["-in"] (Just l)
   makePred s cset
   print =<< SMT.check s
-  print =<< SMT.getExprs s []
+  print =<< SMT.getExprs s [SMT.Atom "domain"]

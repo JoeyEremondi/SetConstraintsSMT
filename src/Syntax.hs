@@ -14,6 +14,9 @@ import Data.Map ((!))
 import qualified Data.Maybe as Maybe
 import qualified SimpleSMT as SMT
 
+import qualified Data.Set as Set
+
+f $$$ [] = return (SMT.Atom f)
 f $$$ args = return $ SMT.List (SMT.Atom f : args)
 
 iff a b = (a `SMT.implies` b) `SMT.and` (b `SMT.implies` a)
@@ -27,6 +30,8 @@ data Expr
   | Neg Expr
   | FunApp String
            [Expr]
+  | Top
+  | Bottom
   deriving (Eq, Ord, Show, Read)
 
 data Constr
@@ -44,6 +49,8 @@ subExpressions e = e : concatMap subExpressions (children e)
     children (Intersect x y) = [x, y]
     children (Neg x) = [x]
     children (FunApp f es) = es
+    children Top = []
+    children Bottom = []
 
 type SubExprs = [Expr]
 
@@ -68,6 +75,7 @@ data PredNumConfig = Config
   { predNums :: Map.Map Expr Integer
   , arities :: Map.Map String Int
   , universalVars :: [SMT.SExpr]
+  , existentialVars :: [String]
   }
 
 getNumPreds :: ConfigM Int
@@ -137,10 +145,58 @@ clauseForExpr e =
           lhs <- p e gxs
           return (lhs `iff` SMT.bool False)
       return $ eqCond ++ neqConds
+    Top -> do
+      x <- forallVar
+      px <- p e x
+      return [px]
+    Bottom -> do
+      x <- forallVar
+      px <- p e x
+      return [SMT.not px]
+
+constrClause :: Constr -> ConfigM SMT.SExpr
+constrClause (e1 `Sub` e2) = do
+  x <- forallVar
+  pe1 <- p e1 x
+  pe2 <- p e2 x
+  return $ pe1 `SMT.implies` pe2
+constrClause (e1 `NotSub` e2) = do
+  x <- fresh
+  pe1 <- p e1 x
+  pe2 <- p e2 x
+  return $ pe1 `SMT.and` (SMT.not pe2)
+
+funClause :: (String, Int) -> ConfigM SMT.SExpr
+funClause (f, arity) = do
+  xs <- forallVars arity
+  fxs <- (f $$$ xs)
+  "domain" $$$ [fxs]
+
+getArities :: [Expr] -> Map.Map String Int
+getArities exprs = Map.fromList $ Maybe.catMaybes $ map appPair exprs
+  where
+    appPair (FunApp f l) = Just (f, length l)
+    appPair _ = Nothing
 
 initialState vars exprs =
   Config
-  {predNums = allExprNums exprs, arities = Map.empty, universalVars = vars}
+  { predNums = allExprNums exprs
+  , arities = getArities exprs
+  , universalVars = vars
+  , existentialVars = []
+  }
+
+fresh :: ConfigM SMT.SExpr
+fresh = do
+  state <- get
+  let oldVars = existentialVars state
+      takenVars = Set.fromList oldVars
+      varNames = map (\i -> "y_exists_" ++ show i) [1 ..]
+      validVars = filter (\x -> not $ x `Set.member` takenVars) varNames
+      newVar = head validVars
+      newState = state {existentialVars = newVar : oldVars}
+  put newState
+  return $ SMT.Atom newVar
 
 withNForalls ::
      [SMT.SExpr]
@@ -152,6 +208,12 @@ withNForalls vars numBits comp = do
   return $ SMT.List $ [SMT.Atom "forall", SMT.List (varTypes), result]
   where
     varTypes = map (\x -> SMT.List [x, SMT.tBits numBits]) vars
+
+validDomain :: ConfigM SMT.SExpr
+validDomain = do
+  vars <- universalVars <$> get
+  varResults <- forM vars (\x -> "domain" $$$ [x])
+  return $ foldr SMT.and (SMT.bool True) varResults
 
 --TODO include constraint stuff
 makePred :: SMT.Solver -> [Constr] -> IO ()
@@ -165,7 +227,32 @@ makePred s clist = do
     (SMT.bvBin 1 1 `SMT.bvULeq` SMT.Atom "b")
   let comp =
         withNForalls vars (toInteger $ length subExprs) $ \vars -> do
-          clauses <- concat <$> forM subExprs clauseForExpr
-          return $ foldr SMT.and (SMT.bool True) clauses
-      exprPreds = (flip evalState) (initialState vars subExprs) comp
+          predClauses <- concat <$> forM subExprs clauseForExpr
+          subClauses <- forM clist $ constrClause
+          let allClauses =
+                foldr SMT.and (SMT.bool True) (predClauses ++ subClauses)
+          isValidDomain <- validDomain
+          funPairs <- (Map.toList . arities) <$> get
+          funClauses <- forM funPairs funClause
+          let singleFunClause = foldr SMT.and (SMT.bool True) funClauses
+          return $
+            (isValidDomain `SMT.implies` allClauses) `SMT.and` singleFunClause
+      (exprPreds, state) = runState comp (initialState vars subExprs)
+  --Declare each of our existential variables 
+  --Declare our domain function
+  SMT.declareFun s "domain" [SMT.tBits $ toInteger numPreds] SMT.tBool
+  --Delare our constructors
+  let funPairs = Map.toList $ arities state
+  forM funPairs $ \(f, arity) -> do
+    SMT.declareFun
+      s
+      f
+      (replicate arity $ SMT.tBits $ toInteger numPreds)
+      (SMT.tBits $ toInteger numPreds)
+  --Declare our existential variables
+  forM (existentialVars state) $ \v -> do
+    SMT.declare s v (SMT.tBits $ toInteger numPreds)
+    --Assert that each existential variable is in our domain
+    SMT.assert s =<< "domain" $$$ [SMT.Atom v]
+  --Assert our domain properties
   SMT.assert s exprPreds

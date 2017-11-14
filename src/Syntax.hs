@@ -191,7 +191,7 @@ fresh = do
   state <- get
   let oldVars = existentialVars state
       takenVars = Set.fromList oldVars
-      varNames = map (\i -> "y_exists_" ++ show i) [1 ..]
+      varNames = map (\i -> "x_exists_" ++ show i) [1 ..]
       validVars = filter (\x -> not $ x `Set.member` takenVars) varNames
       newVar = head validVars
       newState = state {existentialVars = newVar : oldVars}
@@ -216,13 +216,14 @@ validDomain = do
   return $ foldr SMT.and (SMT.bool True) varResults
 
 --TODO include constraint stuff
-makePred :: SMT.Solver -> [Constr] -> IO ()
+makePred :: SMT.Solver -> [Constr] -> IO (Maybe [(SMT.SExpr, SMT.Value)])
 makePred s clist = do
   let subExprs = constrSubExprs clist
       numPreds = length subExprs
       numForall = max 1 $ maxArity subExprs
       constrNums = allExprNums subExprs
-      vars = map (\i -> SMT.Atom $ "x_univ_" ++ show i) [1 .. numForall]
+      tBitVec = SMT.tBits $ toInteger numPreds
+      vars = map (\i -> SMT.Atom $ "y_univ_" ++ show i) [1 .. numForall]
   SMT.defineFun s "bitToBool" [("b", SMT.tBits 1)] SMT.tBool $
     (SMT.bvBin 1 1 `SMT.bvULeq` SMT.Atom "b")
   let comp =
@@ -244,11 +245,7 @@ makePred s clist = do
   --Delare our constructors
   let funPairs = Map.toList $ arities state
   forM funPairs $ \(f, arity) -> do
-    SMT.declareFun
-      s
-      f
-      (replicate arity $ SMT.tBits $ toInteger numPreds)
-      (SMT.tBits $ toInteger numPreds)
+    SMT.declareFun s f (replicate arity $ tBitVec) tBitVec
   --Declare our existential variables
   forM (existentialVars state) $ \v -> do
     SMT.declare s v (SMT.tBits $ toInteger numPreds)
@@ -256,3 +253,15 @@ makePred s clist = do
     SMT.assert s =<< "domain" $$$ [SMT.Atom v]
   --Assert our domain properties
   SMT.assert s exprPreds
+  SMT.define s "darray" (SMT.tArray tBitVec SMT.tBool) $
+    SMT.List $ map SMT.Atom ["_", "as-array", "domain"]
+  result <- SMT.check s
+  case result of
+    SMT.Sat -> do
+      let varsToGet
+            -- (map SMT.Atom $ existentialVars state) ++
+           = [SMT.List [SMT.Atom "domain", SMT.bvBin numPreds 0]]
+            -- ++ (map (SMT.Atom . fst) $ Map.toList $ arities state)
+      Just <$> SMT.getExprs s varsToGet
+    SMT.Unsat -> return Nothing
+    SMT.Unknown -> error "Failed to solve quanitification"

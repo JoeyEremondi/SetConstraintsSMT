@@ -24,9 +24,20 @@ f $$ args = SMT.List (SMT.Atom f : args)
 f $$$ [] = return (SMT.Atom f)
 f $$$ args = return $ SMT.List (SMT.Atom f : args)
 
-iff a b = (a `SMT.implies` b) `SMT.and` (b `SMT.implies` a)
+iff a b = (a ==> b) /\ (b ==> a)
 
-bvEq x y = (x `SMT.bvULeq` y) `SMT.and` (y `SMT.bvULeq` x)
+--bvEq x y (_ extract 2 2 ) nil ) ) ) ) (and (=> (bitToBool ((_ extract 0 0 ) y_univ_1 ) ) (bitToBool ((_ extract 1 1 ) y_univ_1= (x `SMT.bvULeq` y) /\ (y `SMT.bvULeq` x)
+(===) = SMT.eq
+
+(/\) = SMT.and
+
+(\/) = SMT.or
+
+(==>) = SMT.implies
+
+(<==>) = iff
+
+andAll = foldr SMT.and (SMT.bool True)
 
 data Expr
   = Var String
@@ -124,25 +135,25 @@ clauseForExpr e =
       x <- forallVar
       pe <- p e x
       pe2 <- p e2 x
-      return [pe `iff` (SMT.bvNot pe2)]
+      return [pe <==> (SMT.bvNot pe2)]
     Union a b -> do
       x <- forallVar
       pe <- p e x
       pa <- p a x
       pb <- p b x
-      return [pe `iff` (pa `SMT.or` pb)]
+      return [pe <==> (pa \/ pb)]
     Intersect a b -> do
       x <- forallVar
       pe <- p e x
       pa <- p a x
       pb <- p b x
-      return [pe `iff` (pa `SMT.and` pb)]
+      return [pe <==> (pa /\ pb)]
     FunApp f args -> do
       xs <- forallVars (length args)
       fxs <- f $$$ xs
       lhs <- p e fxs
       rhs <- forM (zip args xs) $ \(ex, x) -> p ex x
-      let eqCond = [lhs `iff` (foldr SMT.and (SMT.bool True) rhs)]
+      let eqCond = [lhs <==> (andAll rhs)]
       --Need constraint that no g(...) is in f(...) set
       gs <- differentFuns f
       neqConds <-
@@ -150,7 +161,7 @@ clauseForExpr e =
           xs <- forallVars ar
           gxs <- g $$$ xs
           lhs <- p e gxs
-          return (lhs `iff` SMT.bool False)
+          return (lhs <==> SMT.bool False)
       return $ eqCond ++ neqConds
     Top -> do
       x <- forallVar
@@ -166,12 +177,12 @@ constrClause (e1 `Sub` e2) = do
   x <- forallVar
   pe1 <- p e1 x
   pe2 <- p e2 x
-  return $ pe1 `SMT.implies` pe2
+  return $ pe1 ==> pe2
 constrClause (e1 `NotSub` e2) = do
   x <- fresh
   pe1 <- p e1 x
   pe2 <- p e2 x
-  return $ pe1 `SMT.and` (SMT.not pe2)
+  return $ pe1 /\ (SMT.not pe2)
 
 funClause :: (String, Int) -> ConfigM SMT.SExpr
 funClause (f, arity) = do
@@ -179,34 +190,40 @@ funClause (f, arity) = do
   fxs <- (f $$$ xs)
   "domain" $$$ [fxs]
 
-seqContains s x = "seq.contains" $$ [s, "seq.unit" $$ [x]]
+makePrelude s n = do
+  let Just (datatypeCommand, _) =
+        SMT.readSExpr
+          ("(declare-datatypes () Production (prod String (Seq (_ BitVec " ++
+           show n ++ "))))")
+  SMT.command s datatypeCommand
+  return ()
 
 --Builds up a function so we can iterate through all elements of our domain
 enumeratedDomainClauses :: ConfigM SMT.SExpr
 enumeratedDomainClauses = do
   [x, y] <- forallVars 2
   let xInDomain = ("domain" $$ [x])
-  let xyInDomain = ("domain" $$ [x]) `SMT.and` ("domain" $$ [y])
+  let xyInDomain = ("domain" $$ [x]) /\ ("domain" $$ [y])
   let yLeqMax = y `SMT.bvULeq` (SMT.Atom "domainMax")
   let pInRange =
-        xInDomain `SMT.implies`
-        (("dindex" $$ [x]) `SMT.bvULeq` (SMT.Atom "domainMax"))
+        xInDomain ==> (("dindex" $$ [x]) `SMT.bvULeq` (SMT.Atom "domainMax"))
   let pInverse =
-        (xInDomain `SMT.and` yLeqMax) `SMT.implies`
-        ((("dindex" $$ [x]) `bvEq` y) `iff` ("atIndex" $$ [y] `bvEq` x))
+        (xInDomain /\ yLeqMax) ==>
+        ((("dindex" $$ [x]) === y) <==> ("atIndex" $$ [y] === x))
   -- let pUnique =
-  --       (xyInDomain) `SMT.implies` (("dindex") $$ [x] `bvEq` ("dindex" $$ [y])) `SMT.implies`
-  --       (x `bvEq` y)
-  let mustInclude = (pInRange `SMT.and` pInverse)
-  let mustExclude = (yLeqMax) `SMT.implies` ("domain" $$ ["atIndex" $$ [y]])
-  return $ mustInclude `SMT.and` mustExclude
+  --       (xyInDomain) ==> (("dindex") $$ [x] === ("dindex" $$ [y])) ==>
+  --       (x === y)
+  let mustInclude = (pInRange /\ pInverse)
+  let mustExclude = (yLeqMax) ==> ("domain" $$ ["atIndex" $$ [y]])
+  return $ mustInclude /\ mustExclude
 
 declareEnum :: SMT.Solver -> SMT.SExpr -> IO ()
 declareEnum s bvType = do
   SMT.declareFun s "dindex" [bvType] bvType
   SMT.declare s "domainMax" bvType
   SMT.declareFun s "atIndex" [bvType] bvType
-  --SMT.declareFun s "numProductionsFor" [bvType] bvType
+  --How many productions for ith non-Terminal?
+  SMT.declareFun s "numProductionsFor" [bvType] bvType
   --How many non-terminals are produced in the ith production of X?
   --SMT.declareFun s "ithProdForXLength" [bvType, bvType] bvType
   --What is the function symbol of the ith production for x?
@@ -266,7 +283,7 @@ validDomain :: ConfigM SMT.SExpr
 validDomain = do
   vars <- universalVars <$> get
   varResults <- forM vars (\x -> "domain" $$$ [x])
-  return $ foldr SMT.and (SMT.bool True) varResults
+  return $ andAll varResults
 
 setOptions s = do
   SMT.simpleCommand s ["set-option", ":produce-unsat-cores", "true"]
@@ -282,22 +299,21 @@ makePred s clist = do
       constrNums = allExprNums subExprs
       tBitVec = SMT.tBits $ toInteger numPreds
       vars = map (\i -> SMT.Atom $ "y_univ_" ++ show i) [1 .. numForall]
+  makePrelude s numPreds
   SMT.defineFun s "bitToBool" [("b", SMT.tBits 1)] SMT.tBool $
     (SMT.bvBin 1 1 `SMT.bvULeq` SMT.Atom "b")
   let comp =
         withNForalls vars (toInteger $ length subExprs) $ \vars -> do
           predClauses <- concat <$> forM subExprs clauseForExpr
           subClauses <- forM clist $ constrClause
-          let allClauses =
-                foldr SMT.and (SMT.bool True) (predClauses ++ subClauses)
+          let allClauses = andAll (predClauses ++ subClauses)
           isValidDomain <- validDomain
           funPairs <- (Map.toList . arities) <$> get
           funClauses <- forM funPairs funClause
-          let singleFunClause = foldr SMT.and (SMT.bool True) funClauses
+          let singleFunClause = andAll funClauses
           enumClauses <- enumeratedDomainClauses
           return $
-            (isValidDomain `SMT.implies` allClauses) `SMT.and` singleFunClause `SMT.and`
-            enumClauses
+            (isValidDomain ==> allClauses) /\ singleFunClause /\ enumClauses
       (exprPreds, state) = runState comp (initialState vars subExprs)
   --Declare each of our existential variables 
   --Declare our domain function

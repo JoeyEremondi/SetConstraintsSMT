@@ -16,10 +16,17 @@ import qualified SimpleSMT as SMT
 
 import qualified Data.Set as Set
 
+($$) :: String -> [SMT.SExpr] -> SMT.SExpr
+f $$ [] = (SMT.Atom f)
+f $$ args = SMT.List (SMT.Atom f : args)
+
+($$$) :: String -> [SMT.SExpr] -> ConfigM SMT.SExpr
 f $$$ [] = return (SMT.Atom f)
 f $$$ args = return $ SMT.List (SMT.Atom f : args)
 
 iff a b = (a `SMT.implies` b) `SMT.and` (b `SMT.implies` a)
+
+bvEq x y = (x `SMT.bvULeq` y) `SMT.and` (y `SMT.bvULeq` x)
 
 data Expr
   = Var String
@@ -172,6 +179,73 @@ funClause (f, arity) = do
   fxs <- (f $$$ xs)
   "domain" $$$ [fxs]
 
+seqContains s x = "seq.contains" $$ [s, "seq.unit" $$ [x]]
+
+--Builds up a function so we can iterate through all elements of our domain
+enumeratedDomainClauses :: ConfigM SMT.SExpr
+enumeratedDomainClauses = do
+  [x, y] <- forallVars 2
+  let domainSeq = SMT.Atom "domainSeq"
+  let xInDomain = ("domain" $$ [x])
+  let xyInDomain = ("domain" $$ [x]) `SMT.and` ("domain" $$ [y])
+  let yLeqMax = y `SMT.bvULeq` (SMT.Atom "domainMax")
+  let pInRange =
+        xInDomain `SMT.implies`
+        (("dindex" $$ [x]) `SMT.bvULeq` (SMT.Atom "domainMax"))
+  let pInverse =
+        (xInDomain `SMT.and` yLeqMax) `SMT.implies`
+        ((("dindex" $$ [x]) `bvEq` y) `iff` ("atIndex" $$ [y] `bvEq` x))
+  -- let pUnique =
+  --       (xyInDomain) `SMT.implies` (("dindex") $$ [x] `bvEq` ("dindex" $$ [y])) `SMT.implies`
+  --       (x `bvEq` y)
+  let mustInclude = (pInRange `SMT.and` pInverse)
+  let mustExclude = (yLeqMax) `SMT.implies` ("domain" $$ ["atIndex" $$ [y]])
+  --Trying sequences instead
+  let pInSeq = ("domain" $$ [x]) `iff` seqContains domainSeq x
+  --only in seq once
+  let seqUnique =
+        xInDomain `SMT.implies`
+        (SMT.int (0 - 1) `SMT.eq`
+         ("seq.indexof" $$
+          [ domainSeq
+          , "seq.unit" $$ [x]
+          , ("seq.indexof" $$ [domainSeq, "seq.unit" $$ [x]])
+          ]))
+  let seqFunMatches =
+        "domain" $$ [x] `SMT.implies`
+        (("seqFun" $$
+          ["seq.indexof" $$ [SMT.Atom "domainSeq", "seq.unit" $$ [x]]]) `SMT.eq`
+         x)
+  --Constraints on our production relation
+  return $
+    mustInclude `SMT.and` mustExclude `SMT.and` pInSeq `SMT.and` seqUnique
+
+declareEnum :: SMT.Solver -> SMT.SExpr -> IO ()
+declareEnum s bvType = do
+  SMT.declare s "domainSeq" $ "Seq" $$ [bvType]
+  SMT.declareFun s "seqFun" [SMT.tInt] bvType
+  SMT.declareFun s "dindex" [bvType] bvType
+  SMT.declare s "domainMax" bvType
+  SMT.declareFun s "atIndex" [bvType] bvType
+  --SMT.declareFun s "numProductionsFor" [bvType] bvType
+  --How many non-terminals are produced in the ith production of X?
+  --SMT.declareFun s "ithProdForXLength" [bvType, bvType] bvType
+  --What is the function symbol of the ith production for x?
+  --SMT.declareFun s "ithProdForXSymb" [bvType, bvType] $ bvType -- TODO make string again SMT.Atom "String"
+  --Given:
+  -- a non-terminal X
+  -- an index i (if we're getting the ith production for X)
+  -- the index of the jth non-terminal in the production
+  -- Returns the jth non-terminal
+  --SMT.declareFun s "ithProdForXSeq" [bvType, bvType, bvType] $ "Seq" $$ [bvType]
+  --Inverses for those functions
+  -- SMT.declareFun
+  --   s
+  --   "prodIndex" --TODO fix this, should be string
+  --   [bvType, bvType, "Seq" $$ [bvType]]
+  --   bvType
+  return ()
+
 getArities :: [Expr] -> Map.Map String Int
 getArities exprs = Map.fromList $ Maybe.catMaybes $ map appPair exprs
   where
@@ -215,12 +289,17 @@ validDomain = do
   varResults <- forM vars (\x -> "domain" $$$ [x])
   return $ foldr SMT.and (SMT.bool True) varResults
 
+setOptions s = do
+  SMT.simpleCommand s ["set-option", ":produce-unsat-cores", "true"]
+  return ()
+
 --TODO include constraint stuff
 makePred :: SMT.Solver -> [Constr] -> IO (Maybe [(SMT.SExpr, SMT.Value)])
 makePred s clist = do
+  setOptions s
   let subExprs = constrSubExprs clist
       numPreds = length subExprs
-      numForall = max 1 $ maxArity subExprs
+      numForall = max 2 $ maxArity subExprs
       constrNums = allExprNums subExprs
       tBitVec = SMT.tBits $ toInteger numPreds
       vars = map (\i -> SMT.Atom $ "y_univ_" ++ show i) [1 .. numForall]
@@ -236,12 +315,16 @@ makePred s clist = do
           funPairs <- (Map.toList . arities) <$> get
           funClauses <- forM funPairs funClause
           let singleFunClause = foldr SMT.and (SMT.bool True) funClauses
+          enumClauses <- enumeratedDomainClauses
           return $
-            (isValidDomain `SMT.implies` allClauses) `SMT.and` singleFunClause
+            (isValidDomain `SMT.implies` allClauses) `SMT.and` singleFunClause `SMT.and`
+            enumClauses
       (exprPreds, state) = runState comp (initialState vars subExprs)
   --Declare each of our existential variables 
   --Declare our domain function
   SMT.declareFun s "domain" [SMT.tBits $ toInteger numPreds] SMT.tBool
+  --Declare functions to get the enumeration of our domain
+  declareEnum s tBitVec
   --Delare our constructors
   let funPairs = Map.toList $ arities state
   forM funPairs $ \(f, arity) -> do
@@ -250,18 +333,20 @@ makePred s clist = do
   forM (existentialVars state) $ \v -> do
     SMT.declare s v (SMT.tBits $ toInteger numPreds)
     --Assert that each existential variable is in our domain
-    SMT.assert s =<< "domain" $$$ [SMT.Atom v]
+    SMT.assert s $ "domain" $$ [SMT.Atom v]
   --Assert our domain properties
   SMT.assert s exprPreds
-  SMT.define s "darray" (SMT.tArray tBitVec SMT.tBool) $
-    SMT.List $ map SMT.Atom ["_", "as-array", "domain"]
   result <- SMT.check s
   case result of
     SMT.Sat -> do
-      let varsToGet
-            -- (map SMT.Atom $ existentialVars state) ++
-           = [SMT.List [SMT.Atom "domain", SMT.bvBin numPreds 0]]
-            -- ++ (map (SMT.Atom . fst) $ Map.toList $ arities state)
-      Just <$> SMT.getExprs s varsToGet
-    SMT.Unsat -> return Nothing
+      SMT.command s $ SMT.List [SMT.Atom "get-model"]
+      domainMax <- SMT.getExpr s $ SMT.Atom "domainMax"
+      let (SMT.Bits _ maxNum) = domainMax
+      forM [0 .. maxNum] $ \i -> do
+        result <- SMT.getExpr s $ "atIndex" $$ [SMT.bvBin numPreds i]
+        putStrLn (show i ++ " " ++ show result)
+      return Nothing --TODO fix
+    SMT.Unsat -> do
+      SMT.command s $ SMT.List [SMT.Atom "get-unsat-core"]
+      return Nothing
     SMT.Unknown -> error "Failed to solve quanitification"

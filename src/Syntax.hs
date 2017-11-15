@@ -185,7 +185,6 @@ seqContains s x = "seq.contains" $$ [s, "seq.unit" $$ [x]]
 enumeratedDomainClauses :: ConfigM SMT.SExpr
 enumeratedDomainClauses = do
   [x, y] <- forallVars 2
-  let domainSeq = SMT.Atom "domainSeq"
   let xInDomain = ("domain" $$ [x])
   let xyInDomain = ("domain" $$ [x]) `SMT.and` ("domain" $$ [y])
   let yLeqMax = y `SMT.bvULeq` (SMT.Atom "domainMax")
@@ -200,30 +199,10 @@ enumeratedDomainClauses = do
   --       (x `bvEq` y)
   let mustInclude = (pInRange `SMT.and` pInverse)
   let mustExclude = (yLeqMax) `SMT.implies` ("domain" $$ ["atIndex" $$ [y]])
-  --Trying sequences instead
-  let pInSeq = ("domain" $$ [x]) `iff` seqContains domainSeq x
-  --only in seq once
-  let seqUnique =
-        xInDomain `SMT.implies`
-        (SMT.int (0 - 1) `SMT.eq`
-         ("seq.indexof" $$
-          [ domainSeq
-          , "seq.unit" $$ [x]
-          , ("seq.indexof" $$ [domainSeq, "seq.unit" $$ [x]])
-          ]))
-  let seqFunMatches =
-        "domain" $$ [x] `SMT.implies`
-        (("seqFun" $$
-          ["seq.indexof" $$ [SMT.Atom "domainSeq", "seq.unit" $$ [x]]]) `SMT.eq`
-         x)
-  --Constraints on our production relation
-  return $
-    mustInclude `SMT.and` mustExclude `SMT.and` pInSeq `SMT.and` seqUnique
+  return $ mustInclude `SMT.and` mustExclude
 
 declareEnum :: SMT.Solver -> SMT.SExpr -> IO ()
 declareEnum s bvType = do
-  SMT.declare s "domainSeq" $ "Seq" $$ [bvType]
-  SMT.declareFun s "seqFun" [SMT.tInt] bvType
   SMT.declareFun s "dindex" [bvType] bvType
   SMT.declare s "domainMax" bvType
   SMT.declareFun s "atIndex" [bvType] bvType

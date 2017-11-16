@@ -9,7 +9,7 @@ main = do
         [ (Var "L") `Sub` (FunApp "null" [])
         , (Var "L") `Sub` (FunApp "cons" [Var "L"])
         ]
-  l <- SMT.newLogger 0
+  l <- SMT.newLogger 10
   s <- SMT.newSolver "z3" ["-in"] (Just l)
   result <- makePred s cset
   putStrLn $ show result

@@ -224,59 +224,21 @@ makePrelude s n funPairs = do
   return ()
 
 --Builds up a function so we can iterate through all elements of our domain
-enumeratedDomainClauses :: ConfigM SMT.SExpr
-enumeratedDomainClauses = do
-  [x, y] <- forallVars 2
-  numPreds <- getNumPreds
-  let xInDomain = ("domain" $$ [x])
-  let xyInDomain = ("domain" $$ [x]) /\ ("domain" $$ [y])
-  let yLtMax = y `SMT.bvULt` (SMT.Atom "domainMax")
-  let pInRange =
-        xInDomain ==> (("dindex" $$ [x]) `SMT.bvULt` (SMT.Atom "domainMax"))
-  let pInverse =
-        (xInDomain /\ yLtMax) ==>
-        ((("dindex" $$ [x]) === y) <==> ("atIndex" $$ [y] === x))
-  -- let pUnique =
-  --       (xyInDomain) ==> (("dindex") $$ [x] === ("dindex" $$ [y])) ==>
-  --       (x === y)
-  let mustExclude = (yLtMax) ==> ("domain" $$ ["atIndex" $$ [y]])
-  --Similar idea, but for set of transitions in tree grammar
-  funPairs <- (Map.toList . arities) <$> get
-  let x = () --Shadow to avoid errors
-  prodDomainClauses <-
+--enumeratedDomainClauses :: ConfigM SMT.SExpr
+enumeratedDomainClauses funPairs = do
+  results <-
     forM funPairs $ \(f, arity) -> do
       (num:fx:vars) <- forallVars $ arity + 2
       let prod = ("prod_" ++ f) $$ vars
-      let prodFunClause =
-            ("isProduction" $$ [fx, prod]) <==>
-            ((fx === (f $$ vars)) /\ ("domain" $$ [fx]) /\
-             (andAll $ map (\v -> "domain" $$ [v]) vars))
-      let prodInDomain = "isProduction" $$ [fx, prod]
-      let numLtMax = y `SMT.bvULt` ("numProductionsFor" $$ [fx])
-      let prodInRange =
-            prodInDomain ==>
-            (("prodIndex" $$ [fx, prod]) `SMT.bvULt`
-             ("numProductionsFor" $$ [fx]))
-      let prodInverse =
-            (prodInDomain /\ numLtMax) ==>
-            ((("prodIndex" $$ [fx, prod]) === num) <==>
-             (("ithProductionFor" $$ [fx, num]) === prod))
-      let prodExclude =
-            (numLtMax) ==>
-            ("isProduction" $$ [fx, "ithProductionFor" $$ [fx, num]])
-      return $ prodFunClause /\ prodInRange /\ prodInverse /\ prodExclude
-  return $ pInRange /\ pInverse /\ mustExclude /\ andAll prodDomainClauses
+      return $
+        ("isProduction" $$ [fx, prod]) <==>
+        ((fx === (f $$ vars)) /\ ("domain" $$ [fx]) /\
+         (andAll $ map (\v -> "domain" $$ [v]) vars))
+  return $ andAll results
 
 declareEnum :: SMT.Solver -> SMT.SExpr -> IO ()
 declareEnum s bvType = do
-  SMT.declareFun s "dindex" [bvType] bvType
-  SMT.declare s "domainMax" bvType
-  SMT.declareFun s "atIndex" [bvType] bvType
   SMT.declareFun s "isProduction" [bvType, SMT.Atom "Production"] SMT.tBool
-  --TODO is this big enough?
-  SMT.declareFun s "numProductionsFor" [bvType] bvType
-  SMT.declareFun s "ithProductionFor" [bvType, bvType] (SMT.Atom "Production")
-  SMT.declareFun s "prodIndex" [bvType, SMT.Atom "Production"] bvType
   return ()
 
 getArities :: [Expr] -> Map.Map String Int
@@ -337,6 +299,46 @@ readValueList s sexp = helper sexp []
           hd <- SMT.getExpr s ("head" $$ [sexp])
           helper ("tail" $$ [sexp]) $ accum ++ [hd]
 
+enumerateDomain :: SMT.Solver -> SMT.SExpr -> IO [SMT.Value]
+enumerateDomain s bvType = do
+  SMT.simpleCommand s ["push"]
+  SMT.declare s ("domain_val") bvType
+  SMT.assert s $ "domain" $$ [domainVal]
+  ret <- helper []
+  SMT.simpleCommand s ["pop"]
+  return ret
+  where
+    domainVal = SMT.Atom "domain_val"
+    helper accum = do
+      result <- SMT.check s
+      case result of
+        SMT.Sat -> do
+          valueExpr <- SMT.getExpr s domainVal
+          SMT.assert s (SMT.not ((SMT.value valueExpr) === domainVal))
+          helper (valueExpr : accum)
+        SMT.Unsat -> return accum
+        _ -> error "TODO Failed quant"
+
+enumerateProductions :: SMT.Solver -> SMT.SExpr -> IO [SMT.Value]
+enumerateProductions s fromSymbol = do
+  SMT.simpleCommand s ["push"]
+  SMT.declare s ("prod_val") $ SMT.Atom "Production"
+  SMT.assert s $ "isProduction" $$ [fromSymbol, productionVal]
+  ret <- helper []
+  SMT.simpleCommand s ["pop"]
+  return ret
+  where
+    productionVal = SMT.Atom "prod_val"
+    helper accum = do
+      result <- SMT.check s
+      case result of
+        SMT.Sat -> do
+          prod <- SMT.getExpr s productionVal
+          SMT.assert s (SMT.not ((SMT.value prod) === productionVal))
+          helper (prod : accum)
+        SMT.Unsat -> return accum
+        _ -> error "TODO Failed quant"
+
 --TODO include constratailint stuff
 makePred :: SMT.Solver -> [Constr] -> IO (Maybe [(SMT.SExpr, SMT.Value)])
 makePred s clist = do
@@ -360,7 +362,7 @@ makePred s clist = do
           isValidDomain <- validDomain
           funClauses <- forM funPairs funClause
           let singleFunClause = andAll funClauses
-          enumClauses <- enumeratedDomainClauses
+          enumClauses <- enumeratedDomainClauses funPairs
           return $
             (isValidDomain ==> allClauses) /\ singleFunClause /\ enumClauses
       (exprPreds, state) = runState comp state0
@@ -385,21 +387,10 @@ makePred s clist = do
   case result of
     SMT.Sat -> do
       SMT.command s $ SMT.List [SMT.Atom "get-model"]
-      (SMT.Bits _ maxNum) <- SMT.getExpr s $ SMT.Atom "domainMax"
-      let funPairs = Map.toList $ arities state
-      forM [0 .. maxNum - 1] $ \i -> do
-        xval <- SMT.getExpr s $ "atIndex" $$ [SMT.bvBin numPreds i]
-        putStrLn $ "Domain " ++ show i ++ ": " ++ vshow xval
-        let x = SMT.value xval
-        forM [()] $ \_ -> do
-          (SMT.Bits _ numProds) <- SMT.getExpr s $ "numProductionsFor" $$ [x]
-          forM [0 .. numProds - 1] $ \i -> do
-            result <-
-              SMT.getExpr
-                s
-                ("toSymb" $$ ["ithProductionFor" $$ [x, SMT.bvBin numPreds i]])
-            putStrLn $ sshow x ++ " --> " ++ "(" ++ (vshow result) ++ ")"
-            putStrLn $ "Raw result " ++ vshow result
+      domain <- enumerateDomain s tBitVec
+      forM domain $ \d -> do
+        prodsFrom <- enumerateProductions s $ SMT.value d
+        forM prodsFrom $ \p -> putStrLn $ vshow d ++ "  ->  " ++ vshow p
       return Nothing --TODO fix
     SMT.Unsat -> do
       SMT.command s $ SMT.List [SMT.Atom "get-unsat-core"]

@@ -6,7 +6,7 @@ import Syntax
 main :: IO ()
 main = do
   let cset =
-        [ (Var "L") `Sub` (FunApp "nil" [])
+        [ (Var "L") `Sub` (FunApp "null" [])
         , (Var "L") `Sub` (FunApp "cons" [Var "L"])
         ]
   l <- SMT.newLogger 0

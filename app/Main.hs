@@ -12,8 +12,8 @@ main = do
           (_:"verbose":_) -> True
           _ -> False
   let cset =
-        [ (Var "L") `Sub` (FunApp "null" [])
-        , (Var "L") `Sub` (FunApp "cons" [Var "L"])
+        [ (Var "L") `Sup` (FunApp "null" [])
+        , (Var "L") `Sup` (FunApp "cons" [Var "L"])
         ]
   l <-
     SMT.newLogger $

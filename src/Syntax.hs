@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Syntax where
 
@@ -75,6 +76,9 @@ data Constr
   | NotSub Expr
            Expr
   deriving (Eq, Ord, Show, Read)
+
+pattern Sup :: Expr -> Expr -> Constr
+pattern Sup x y = Sub y x
 
 subExpressions :: Expr -> [Expr]
 subExpressions e = e : concatMap subExpressions (children e)
@@ -320,13 +324,13 @@ readValueList s sexp = helper sexp []
 enumerateDomain :: SMT.Solver -> SMT.SExpr -> IO [SMT.Value]
 enumerateDomain s bvType = do
   SMT.simpleCommand s ["push"]
-  SMT.declare s ("domain_val") bvType
+  SMT.declare s ("domain-val") bvType
   SMT.assert s $ "domain" $$ [domainVal]
   ret <- helper []
   SMT.simpleCommand s ["pop"]
   return ret
   where
-    domainVal = SMT.Atom "domain_val"
+    domainVal = SMT.Atom "domain-val"
     helper accum = do
       result <- SMT.check s
       case result of
@@ -340,13 +344,13 @@ enumerateDomain s bvType = do
 enumerateProductions :: SMT.Solver -> SMT.SExpr -> IO [SMT.Value]
 enumerateProductions s fromSymbol = do
   SMT.simpleCommand s ["push"]
-  SMT.declare s ("prod_val") $ SMT.Atom "Production"
+  SMT.declare s ("prod-val") $ SMT.Atom "Production"
   SMT.assert s $ "isProduction" $$ [fromSymbol, productionVal]
   ret <- helper []
   SMT.simpleCommand s ["pop"]
   return ret
   where
-    productionVal = SMT.Atom "prod_val"
+    productionVal = SMT.Atom "prod-val"
     helper accum = do
       result <- SMT.check s
       case result of

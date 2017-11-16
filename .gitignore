@@ -20,3 +20,5 @@ cabal.project.local
 .HTF/
 .ghc.environment.*
 test.smt2
+test.out
+test.out

@@ -7,11 +7,19 @@ import System.Environment
 main :: IO ()
 main = do
   args <- getArgs
+  let verbose =
+        case args of
+          (_:"verbose":_) -> True
+          _ -> False
   let cset =
         [ (Var "L") `Sub` (FunApp "null" [])
         , (Var "L") `Sub` (FunApp "cons" [Var "L"])
         ]
-  l <- SMT.newLogger 10
+  l <-
+    SMT.newLogger $
+    if verbose
+      then 0
+      else 10
   s <-
     case args of
       "cvc4":_ ->

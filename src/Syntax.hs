@@ -14,6 +14,7 @@ import Data.Map ((!))
 import qualified Data.Maybe as Maybe
 import qualified SimpleSMT as SMT
 
+import Data.Char (isAlphaNum)
 import qualified Data.Set as Set
 
 ($$) :: String -> [SMT.SExpr] -> SMT.SExpr
@@ -41,7 +42,7 @@ iff a b = (a ==> b) /\ (b ==> a)
 andAll l =
   case l of
     [] -> SMT.bool True
-    _ -> foldr1 SMT.and l
+    _ -> foldr1 SMT.and $ filter (/= SMT.bool True) l
 
 -- string s = SMT.Atom $ ['"'] ++ s ++ ['"']
 -- slCons h t = "insert" $$ [t, h]
@@ -86,6 +87,12 @@ subExpressions e = e : concatMap subExpressions (children e)
     children Top = []
     children Bottom = []
 
+isVar (Var v) = True
+isVar _ = False
+
+varName :: Expr -> String
+varName (Var v) = v
+
 type SubExprs = [Expr]
 
 constrSubExprs :: [Constr] -> SubExprs
@@ -125,8 +132,11 @@ p e x = do
   n <- getNumPreds
   i <- ((Map.! e) . predNums) <$> get
   -- let xi = SMT.extract x (toInteger i) (toInteger i)
-  let mask = SMT.bvBin n $ 2 ^ i
-  return $ (SMT.not $ (x `SMT.bvAnd` mask) `SMT.eq` SMT.bvBin n 0)
+  return $ ithBit i x n
+
+ithBit i x n = (SMT.not $ (x `SMT.bvAnd` mask) `SMT.eq` SMT.bvBin n 0)
+  where
+    mask = SMT.bvBin n $ 2 ^ i
 
 forallVar :: ConfigM SMT.SExpr
 forallVar = do
@@ -144,33 +154,33 @@ differentFuns f = do
   arMap <- arities <$> get
   return $ filter (\(g, _) -> g /= f) $ Map.toList arMap
 
-clauseForExpr :: Expr -> ConfigM [SMT.SExpr]
+clauseForExpr :: Expr -> ConfigM SMT.SExpr
 clauseForExpr e =
   case e of
-    Var _ -> return []
+    Var _ -> return $ SMT.bool True
     Neg e2 -> do
       x <- forallVar
       pe <- p e x
       pe2 <- p e2 x
-      return [pe <==> (SMT.bvNot pe2)]
+      return $ pe <==> (SMT.bvNot pe2)
     Union a b -> do
       x <- forallVar
       pe <- p e x
       pa <- p a x
       pb <- p b x
-      return [pe <==> (pa \/ pb)]
+      return $ pe <==> (pa \/ pb)
     Intersect a b -> do
       x <- forallVar
       pe <- p e x
       pa <- p a x
       pb <- p b x
-      return [pe <==> (pa /\ pb)]
+      return $ pe <==> (pa /\ pb)
     FunApp f args -> do
       xs <- forallVars (length args)
       fxs <- f $$$ xs
       lhs <- p e fxs
       rhs <- forM (zip args xs) $ \(ex, x) -> p ex x
-      let eqCond = [lhs <==> (andAll rhs)]
+      let eqCond = lhs <==> (andAll rhs)
       --Need constraint that no g(...) is in f(...) set
       gs <- differentFuns f
       neqConds <-
@@ -179,15 +189,15 @@ clauseForExpr e =
           gxs <- g $$$ xs
           lhs <- p e gxs
           return (lhs <==> SMT.bool False)
-      return $ eqCond ++ neqConds
+      return $ eqCond /\ andAll neqConds
     Top -> do
       x <- forallVar
       px <- p e x
-      return [px <==> SMT.bool True]
+      return px
     Bottom -> do
       x <- forallVar
       px <- p e x
-      return [px <==> SMT.bool False]
+      return $ SMT.not px
 
 constrClause :: Constr -> ConfigM SMT.SExpr
 constrClause (e1 `Sub` e2) = do
@@ -347,6 +357,28 @@ enumerateProductions s fromSymbol = do
         SMT.Unsat -> return accum
         _ -> error "TODO Failed quant"
 
+varProductions :: SMT.Solver -> Expr -> Integer -> Int -> IO [SMT.Value]
+varProductions s v i n = do
+  SMT.simpleCommand s ["push"]
+  SMT.declare s vname $ SMT.tBits $ toInteger n
+  SMT.assert s $ "domain" $$ [matchingVal]
+  SMT.assert s $ ithBit i matchingVal n
+  ret <- helper []
+  SMT.simpleCommand s ["pop"]
+  return ret
+  where
+    vname = "varprod-" ++ (filter isAlphaNum (varName v))
+    matchingVal = SMT.Atom vname
+    helper accum = do
+      result <- SMT.check s
+      case result of
+        SMT.Sat -> do
+          prod <- SMT.getExpr s matchingVal
+          SMT.assert s (SMT.not ((SMT.value prod) === matchingVal))
+          helper (prod : accum)
+        SMT.Unsat -> return accum
+        _ -> error "TODO Failed quant"
+
 --TODO include constratailint stuff
 makePred :: SMT.Solver -> [Constr] -> IO (Maybe [(SMT.SExpr, SMT.Value)])
 makePred s clist = do
@@ -360,10 +392,11 @@ makePred s clist = do
       vars = map (\i -> SMT.Atom $ "y_univ_" ++ show i) [1 .. numForall]
       state0 = (initialState vars subExprs)
       funPairs = (Map.toList . arities) state0
+      allFreeVars :: [Expr] = filter isVar subExprs
   makePrelude s (toInteger numPreds) funPairs
   let comp =
         withNForalls vars (toInteger $ length subExprs) $ \vars -> do
-          predClauses <- concat <$> forM subExprs clauseForExpr
+          predClauses <- forM subExprs clauseForExpr
           subClauses <- forM clist $ constrClause
           let allClauses = andAll (predClauses ++ subClauses)
           isValidDomain <- validDomain
@@ -399,6 +432,9 @@ makePred s clist = do
       forM domain $ \d -> do
         prodsFrom <- enumerateProductions s $ SMT.value d
         forM prodsFrom $ \p -> putStrLn $ vshow d ++ "  ->  " ++ vshow p
+      forM allFreeVars $ \v -> do
+        prods <- varProductions s v ((predNums state) Map.! v) numPreds
+        forM prods $ \prod -> putStrLn $ show v ++ "  ->  " ++ vshow prod
       return Nothing --TODO fix
     SMT.Unsat -> do
       SMT.command s $ SMT.List [SMT.Atom "get-unsat-core"]

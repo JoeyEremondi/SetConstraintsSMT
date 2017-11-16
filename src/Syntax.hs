@@ -59,6 +59,8 @@ sshow s = SMT.showsSExpr s ""
 
 vshow = sshow . SMT.value
 
+listInDomain n l = andAll $ map (\i -> "domain" $$ [nthElem l i]) [0 .. n - 1]
+
 data Expr
   = Var String
   | Union Expr
@@ -211,59 +213,75 @@ funClause (f, arity) = do
   "domain" $$$ [fxs]
 
 makePrelude s n = do
-  return ()
-  -- let Just (datatypeCommand, _) =
-  --       SMT.readSExpr
-  --         ("(declare-datatypes () Production (prod String (Seq (_ BitVec " ++
-  --          show n ++ "))))")
-  -- SMT.command s datatypeCommand
+  let bvTypeS = sshow $ SMT.tBits n
+  let Just (datatypeCommand, _) =
+        SMT.readSExpr
+          ("(declare-datatypes () ((Production (prod (fromSymb " ++
+           bvTypeS ++ ") (funSymb String) (toSymb (List " ++ bvTypeS ++ "))))))")
+  SMT.command s datatypeCommand
   return ()
 
 --Builds up a function so we can iterate through all elements of our domain
 enumeratedDomainClauses :: ConfigM SMT.SExpr
 enumeratedDomainClauses = do
   [x, y] <- forallVars 2
+  numPreds <- getNumPreds
   let xInDomain = ("domain" $$ [x])
   let xyInDomain = ("domain" $$ [x]) /\ ("domain" $$ [y])
-  let yLeqMax = y `SMT.bvULeq` (SMT.Atom "domainMax")
+  let yLtMax = y `SMT.bvULt` (SMT.Atom "domainMax")
   let pInRange =
-        xInDomain ==> (("dindex" $$ [x]) `SMT.bvULeq` (SMT.Atom "domainMax"))
+        xInDomain ==> (("dindex" $$ [x]) `SMT.bvULt` (SMT.Atom "domainMax"))
   let pInverse =
-        (xInDomain /\ yLeqMax) ==>
+        (xInDomain /\ yLtMax) ==>
         ((("dindex" $$ [x]) === y) <==> ("atIndex" $$ [y] === x))
   -- let pUnique =
   --       (xyInDomain) ==> (("dindex") $$ [x] === ("dindex" $$ [y])) ==>
   --       (x === y)
-  let mustExclude = (yLeqMax) ==> ("domain" $$ ["atIndex" $$ [y]])
+  let mustExclude = (yLtMax) ==> ("domain" $$ ["atIndex" $$ [y]])
   --Similar idea, but for set of transitions in tree grammar
   funPairs <- (Map.toList . arities) <$> get
+  prodDomainClauses <-
+    forM funPairs $ \(f, arity) -> do
+      (fx:vars) <- forallVars $ arity + 1
+      let varsList = sList vars
+      return $
+        ("isProduction" $$ [fx, string f, varsList]) <==>
+        ((fx === (f $$ vars)) /\ ("domain" $$ [x]) /\
+         (listInDomain arity $ varsList))
   prodConds <-
     forM funPairs $ \(f, arity) -> do
       num:vars <- forallVars $ 1 + arity
       fx <- f $$$ vars
+      x1 <- forallVar
       let varsList = sList vars
-      let allInDomain = andAll [("domain" $$ [xi]) | xi <- vars]
+      let allInDomain = andAll [("domain" $$ [xi]) | xi <- fx : vars]
       let fxMax = "numProductionsFor" $$ [fx, string f]
-      let numInRange = num `SMT.bvULeq` fxMax
+      let numInRange = num `SMT.bvULt` fxMax
       let prodInRange =
             allInDomain ==>
-            (("prodIndex" $$ [fx, string f, varsList]) `SMT.bvULeq` fxMax)
+            (("prodIndex" $$ [fx, string f, varsList]) `SMT.bvULt` fxMax)
       let prodInverse =
             (allInDomain /\ numInRange) ==>
             ((("prodIndex" $$ [fx, string f, varsList]) === num) <==>
              ((("ithProductionFor" $$ [fx, string f, num])) === varsList))
       let prodExclude =
-            numInRange ==>
-            ((applyList f arity ("ithProductionFor" $$ [fx, string f, num])) ===
-             fx)
-      return $ prodInRange /\ prodInverse /\ prodExclude
-  return $ pInRange /\ pInverse /\ mustExclude /\ (andAll prodConds)
+            (("domain" $$ [x1]) /\ numInRange) ==>
+            (((applyList f arity ("ithProductionFor" $$ [x1, string f, num])) ===
+              x1) /\
+             (listInDomain arity ("ithProductionFor" $$ [x1, string f, num])))
+      let prodExclude2 =
+            (SMT.bvBin numPreds 0 `SMT.bvULt`
+             ("numProductionsFor" $$ [x1, string f])) ==>
+            ("domain" $$ [x1])
+      return $ prodInRange /\ prodInverse /\ prodExclude /\ prodExclude2
+  return $ pInRange /\ pInverse /\ mustExclude -- /\ (andAll prodConds)
 
 declareEnum :: SMT.Solver -> SMT.SExpr -> IO ()
 declareEnum s bvType = do
   SMT.declareFun s "dindex" [bvType] bvType
   SMT.declare s "domainMax" bvType
   SMT.declareFun s "atIndex" [bvType] bvType
+  SMT.declareFun s "isProduction" [SMT.Atom "Production"] SMT.tBool
   --How many productions for ith non-Terminal?
   SMT.declareFun s "numProductionsFor" [bvType, tString] bvType
   --What is the ith production for x with function f
@@ -318,17 +336,28 @@ setOptions s = do
   SMT.simpleCommand s ["set-option", ":produce-unsat-cores", "true"]
   return ()
 
+readValueList :: SMT.Solver -> SMT.SExpr -> IO [SMT.Value]
+readValueList s sexp = helper sexp []
+  where
+    helper sexp accum = do
+      lValue <- SMT.getExpr s sexp
+      case lValue of
+        SMT.Other (SMT.Atom "nil") -> return accum
+        _ -> do
+          hd <- SMT.getExpr s ("head" $$ [sexp])
+          helper ("tail" $$ [sexp]) $ accum ++ [hd]
+
 --TODO include constraint stuff
 makePred :: SMT.Solver -> [Constr] -> IO (Maybe [(SMT.SExpr, SMT.Value)])
 makePred s clist = do
   setOptions s
   let subExprs = constrSubExprs clist
       numPreds = length subExprs
-      numForall = max 2 $ 1 + maxArity subExprs
+      numForall = 2 + maxArity subExprs
       constrNums = allExprNums subExprs
       tBitVec = SMT.tBits $ toInteger numPreds
       vars = map (\i -> SMT.Atom $ "y_univ_" ++ show i) [1 .. numForall]
-  makePrelude s numPreds
+  makePrelude s $ toInteger numPreds
   SMT.defineFun s "bitToBool" [("b", SMT.tBits 1)] SMT.tBool $
     (SMT.bvBin 1 1 `SMT.bvULeq` SMT.Atom "b")
   let comp =
@@ -367,18 +396,20 @@ makePred s clist = do
       SMT.command s $ SMT.List [SMT.Atom "get-model"]
       (SMT.Bits _ maxNum) <- SMT.getExpr s $ SMT.Atom "domainMax"
       let funPairs = Map.toList $ arities state
-      forM [0 .. maxNum] $ \i -> do
+      forM [0 .. maxNum - 1] $ \i -> do
         xval <- SMT.getExpr s $ "atIndex" $$ [SMT.bvBin numPreds i]
+        putStrLn $ "Domain " ++ show i ++ ": " ++ vshow xval
         let x = SMT.value xval
         forM funPairs $ \(f, _) -> do
           (SMT.Bits _ numProds) <-
             SMT.getExpr s ("numProductionsFor" $$ [x, string f])
-          forM [0 .. numProds] $ \prodNum -> do
-            result <-
-              SMT.getExpr s $
+          forM [0 .. numProds - 1] $ \prodNum -> do
+            resultList <-
+              readValueList s $
               "ithProductionFor" $$ [x, string f, SMT.bvBin numPreds prodNum]
-            putStrLn $ "Production " ++ show (sshow x, f)
-            putStrLn (vshow result)
+            putStrLn $
+              sshow x ++
+              " --> " ++ f ++ "(" ++ concatMap vshow resultList ++ ")"
       return Nothing --TODO fix
     SMT.Unsat -> do
       SMT.command s $ SMT.List [SMT.Atom "get-unsat-core"]

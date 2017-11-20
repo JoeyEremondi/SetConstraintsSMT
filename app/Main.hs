@@ -1,6 +1,7 @@
 module Main where
 
 import qualified SimpleSMT as SMT
+import SolveMonadic
 import Syntax
 import System.Environment
 
@@ -12,8 +13,8 @@ main = do
           (_:"verbose":_) -> True
           _ -> False
   let cset =
-        [ (Var "L") `Sup` (FunApp "null" [])
-        , (Var "L") `Sup` (FunApp "cons" [Var "L"])
+        [ (Var "L") `sup` (FunApp "null" [])
+        , (Var "L") `sup` (FunApp "cons" [Var "L"])
         ]
   l <-
     SMT.newLogger $

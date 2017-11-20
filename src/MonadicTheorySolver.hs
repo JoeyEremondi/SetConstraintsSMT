@@ -5,7 +5,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
 
-module SolveMonadic where
+module MonadicTheorySolver where
 
 import SMTHelpers
 import qualified SimpleSMT as SMT

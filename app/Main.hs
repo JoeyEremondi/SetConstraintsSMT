@@ -1,7 +1,7 @@
 module Main where
 
+import MonadicTheorySolver
 import qualified SimpleSMT as SMT
-import SolveMonadic
 import Syntax
 import System.Environment
 

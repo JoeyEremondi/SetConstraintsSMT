@@ -82,3 +82,40 @@ getArities exprs = Map.fromList $ Maybe.catMaybes $ map appPair exprs
   where
     appPair (FunApp f l) = Just (f, length l)
     appPair _ = Nothing
+
+constrNot :: Constr -> Constr
+constrNot (x `Sub` y) = x `NotSub` y
+constrNot (x `NotSub` y) = x `Sub` y
+
+--Arbitrary expressions over constraints
+--We only model positive constraints here, since we have allow negation of
+--arbitrary boolean expressions
+data CExpr
+  = CSubset Expr
+            Expr
+  | CNot CExpr
+  | CAnd CExpr
+         CExpr
+  | COr CExpr
+        CExpr
+  | CXor CExpr
+         CExpr
+  | CImplies CExpr
+             CExpr
+  | CIff CExpr
+         CExpr
+
+--Get the literals in a constraint expression
+literalsInCExpr :: CExpr -> Set.Set (Expr, Expr)
+literalsInCExpr (CSubset e1 e2) = Set.singleton (e1, e2)
+literalsInCExpr (CNot c) = literalsInCExpr c
+literalsInCExpr (CAnd c1 c2) =
+  (literalsInCExpr c1) `Set.union` literalsInCExpr c2
+literalsInCExpr (COr c1 c2) =
+  (literalsInCExpr c1) `Set.union` literalsInCExpr c2
+literalsInCExpr (CXor c1 c2) =
+  (literalsInCExpr c1) `Set.union` literalsInCExpr c2
+literalsInCExpr (CImplies c1 c2) =
+  (literalsInCExpr c1) `Set.union` literalsInCExpr c2
+literalsInCExpr (CIff c1 c2) =
+  (literalsInCExpr c1) `Set.union` literalsInCExpr c2

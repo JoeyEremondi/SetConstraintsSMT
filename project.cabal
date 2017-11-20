@@ -15,7 +15,7 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Syntax, SMTHelpers, TseitinPredicates, SolveMonadic
+  exposed-modules:     Syntax, SMTHelpers, TseitinPredicates, MonadicTheorySolver
   build-depends:       base >= 4.7 && < 5,
                        simple-smt >= 0.7.1,
                        mtl == 2.2.1,

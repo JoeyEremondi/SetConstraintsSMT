@@ -39,6 +39,14 @@ orAll l =
 -- nthElem :: SMT.SExpr -> Int -> SMT.SExpr
 -- nthElem l 0 = "head" $$ [l]
 -- nthElem l n = nthElem ("tail" $$ [l]) (n - 1)
-sshow s = SMT.showsSExpr s ""
+sshow s =
+  case s of
+    SMT.List [SMT.Atom "_", SMT.Atom ('b':'v':x), _] -> x
+    _ -> SMT.showsSExpr s ""
 
-vshow = sshow . SMT.value
+vshow x =
+  case x of
+    SMT.Bits _ i -> show i
+    SMT.Bool b -> show b
+    SMT.Int i -> show i
+    SMT.Other s -> sshow s

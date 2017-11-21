@@ -50,22 +50,35 @@ enumeratedDomainClauses funPairs = do
   results <-
     forM funPairs $ \(f, arity) -> do
       (num:fx:vars) <- forallVars $ arity + 2
-      let prod = ("prod_" ++ f) $$ vars
       return $
-        ("isProduction" $$ [fx, prod]) ===
+        ((isFProduction f) $$ (fx : vars)) ===
         ((fx === (f $$ vars)) /\ ("domain" $$ [fx]) /\
          (andAll $ map (\v -> "domain" $$ [v]) vars))
   --Assert that every x has a production
   --This makes sure our finite domain maps to the Herbrand domain
   x <- forallVar
-  let hasProd =
-        ("domain" $$ [x]) ==> ("isProduction" $$ [x, "productionFor" $$ [x]])
-  return $ (andAll results) /\ hasProd
+  --We or each of these conditions
+  let hasProdConds =
+        (flip map) funPairs $ \(f, arity) -> do
+          ("domain" $$ [x]) ==>
+            ((isFProduction f) $$
+             (x : [productionFor i $$ [x] | i <- [0 .. arity - 1]]))
+  return $ (andAll results) /\ (orAll hasProdConds)
 
--- declareEnum :: SMT.Solver -> SMT.SExpr -> IO ()
-declareEnum s bvType = do
-  SMT.declareFun s "isProduction" [bvType, SMT.Atom "Production"] SMT.tBool
-  SMT.declareFun s "productionFor" [bvType] (SMT.Atom "Production")
+isFProduction f = "isProductionFor-" ++ f
+
+productionFor i = "productionFor" ++ show i
+
+declareEnum :: SMT.Solver -> SMT.SExpr -> [(String, Int)] -> Int -> IO ()
+declareEnum s bvType funPairs maxArity = do
+  forM funPairs $ \(f, arity) -> do
+    SMT.declareFun
+      s
+      (isFProduction f)
+      (bvType : replicate arity bvType)
+      SMT.tBool
+  forM [0 .. maxArity - 1] $ \argNum -> do
+    SMT.declareFun s (productionFor argNum) [bvType] bvType
   return ()
 
 withNForalls ::
@@ -121,23 +134,31 @@ enumerateDomain s bvType = do
         SMT.Unsat -> return accum
         _ -> error "TODO Failed quant enumerating domain"
 
-enumerateProductions :: SMT.Solver -> SMT.SExpr -> IO [SMT.Value]
-enumerateProductions s fromSymbol = do
+enumerateProductions ::
+     SMT.Solver -> SMT.SExpr -> SMT.SExpr -> (String, Int) -> IO [[SMT.Value]]
+enumerateProductions s fromSymbol bvType (f, arity) = do
   SMT.simpleCommand s ["push"]
-  SMT.declare s ("prod-val") $ SMT.Atom "Production"
-  SMT.assert s $ "isProduction" $$ [fromSymbol, productionVal]
+  forM allArgNums $ \argNum -> SMT.declare s (argName argNum) bvType
+  SMT.assert s $ (isFProduction f) $$ (fromSymbol : allArgs)
   ret <- helper []
   SMT.simpleCommand s ["pop"]
-  return ret
+  return $ ret
   where
-    productionVal = SMT.Atom "prod-val"
+    allArgNums = [0 .. arity - 1]
+    argName i = "prod-val" ++ show i
+    allArgs = map productionVal allArgNums
+    productionVal i = SMT.Atom $ argName i
     helper accum = do
       result <- SMT.check s
       case result of
         SMT.Sat -> do
-          prod <- SMT.getExpr s productionVal
-          SMT.assert s (SMT.not ((SMT.value prod) === productionVal))
-          helper (prod : accum)
+          args <-
+            forM allArgNums $ \argNum -> SMT.getExpr s $ productionVal argNum
+          let neqConds =
+                (flip map) (zip allArgNums args) $ \(i, arg) ->
+                  SMT.not ((SMT.value arg) === productionVal i)
+          SMT.assert s $ orAll neqConds
+          helper (args : accum)
         SMT.Unsat -> return accum
         _ -> error "TODO Failed quant"
 
@@ -173,9 +194,10 @@ makePred s clist = do
   --SMT.simpleCommand s ["push"]
   let subExprs = constrSubExprs clist
       numPreds = length subExprs
-      numForall = 2 + maxArity subExprs
+      theMaxArity = maxArity subExprs
+      numForall = 2 + theMaxArity
       constrNums = allExprNums subExprs
-      tBitVec = SMT.tBits $ toInteger numPreds
+      bvType = SMT.tBits $ toInteger numPreds
       vars = map (\i -> SMT.Atom $ "y_univ_" ++ show i) [1 .. numForall]
       state0 = (initialState vars subExprs)
       funPairs = (Map.toList . arities) state0
@@ -203,18 +225,18 @@ makePred s clist = do
   SMT.defineFun
     s
     "booleanDomain"
-    [(boolDomArgName, SMT.tBits $ toInteger numPreds)]
+    [(boolDomArgName, bvType)]
     SMT.tBool
     boolDomPreds
-  SMT.declareFun s "functionDomain" [SMT.tBits $ toInteger numPreds] SMT.tBool
-  SMT.defineFun s "domain" [("x", SMT.tBits (toInteger numPreds))] SMT.tBool $
+  SMT.declareFun s "functionDomain" [bvType] SMT.tBool
+  SMT.defineFun s "domain" [("x", bvType)] SMT.tBool $
     ("booleanDomain" $$ [SMT.Atom "x"]) /\ ("functionDomain" $$ [SMT.Atom "x"])
   --Declare functions to get the enumeration of our domain
-  declareEnum s tBitVec
+  declareEnum s bvType funPairs theMaxArity
   --Delare our constructors
   let funPairs = Map.toList $ arities state
   forM funPairs $ \(f, arity) -> do
-    SMT.declareFun s f (replicate arity $ tBitVec) tBitVec
+    SMT.declareFun s f (replicate arity bvType) bvType
   --Declare our existential variables
   forM (existentialVars state) $ \v -> do
     SMT.declare s v (SMT.tBits $ toInteger numPreds)
@@ -227,11 +249,15 @@ makePred s clist = do
   case result of
     SMT.Sat -> do
       SMT.command s $ SMT.List [SMT.Atom "get-model"]
-      domain <- enumerateDomain s tBitVec
+      domain <- enumerateDomain s bvType
       putStrLn $ show $ map vshow domain
-      forM domain $ \d -> do
-        prodsFrom <- enumerateProductions s $ SMT.value d
-        forM prodsFrom $ \p -> putStrLn $ vshow d ++ "  ->  " ++ vshow p
+      forM domain $ \d ->
+        forM funPairs $ \funPair@(f, arity) -> do
+          prodsFrom <- enumerateProductions s (SMT.value d) bvType funPair
+          forM prodsFrom $ \p ->
+            putStrLn $
+            vshow d ++
+            "  ->  " ++ f ++ "(" ++ (List.intercalate ", " $ map vshow p) ++ ")"
       forM allFreeVars $ \v -> do
         prods <- varProductions s v ((predNums state) Map.! v) numPreds
         forM prods $ \prod -> putStrLn $ show v ++ "  ->  " ++ vshow prod

@@ -15,9 +15,9 @@ main = do
           _ -> False
   let cset =
         ((Var "N") `sup` (FunApp "zero" [])) `CAnd`
-        ((Var "N") `sup` (FunApp "succ" [Var "N"])) `CAnd`
-        ((Var "L") `sup` (FunApp "null" [])) `CAnd`
-        ((Var "L") `sup` (FunApp "cons" [Var "N", Var "L"]))
+        ((Var "N") `sup` (FunApp "succ" [Var "N"])) --`CAnd`
+        -- ((Var "L") `sup` (FunApp "null" [])) `CAnd`
+        -- ((Var "L") `sup` (FunApp "cons" [Var "N", Var "L"]))
   l <-
     SMT.newLogger $
     if verbose

@@ -14,10 +14,10 @@ main = do
           (_:"verbose":_) -> True
           _ -> False
   let cset =
+        ((Var "N") `sup` (FunApp "zero" [])) `CAnd`
+        ((Var "N") `sup` (FunApp "succ" [Var "N"])) `CAnd`
         ((Var "L") `sup` (FunApp "null" [])) `CAnd`
-        ((Var "L") `sup` (FunApp "cons" [Var "N", Var "L"])) `CAnd`
-        ((Var "N") `sup` (FunApp "Zero" [])) `CAnd`
-        ((Var "N") `sup` (FunApp "Succ" [Var "N"]))
+        ((Var "L") `sup` (FunApp "cons" [Var "N", Var "L"]))
   l <-
     SMT.newLogger $
     if verbose
@@ -29,6 +29,11 @@ main = do
         SMT.newSolver
           "cvc4"
           ["--lang=smt2", "--fmf-bound", "--incremental"]
+          (Just l)
+      "boolector":_ ->
+        SMT.newSolver
+          "boolector"
+          ["--smt2", "--incremental", "--smt2-model"]
           (Just l)
       _ -> SMT.newSolver "z3" ["-in"] (Just l)
   solveSetConstraints s cset

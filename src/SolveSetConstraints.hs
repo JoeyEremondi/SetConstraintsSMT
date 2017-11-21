@@ -8,8 +8,6 @@ import SMTHelpers
 import qualified SimpleSMT as SMT
 import Syntax
 
-litType = SMT.tInt
-
 formulaForCExpr :: (Expr -> SMT.SExpr) -> CExpr -> SMT.SExpr
 formulaForCExpr exprNum cexp =
   case cexp of
@@ -34,16 +32,20 @@ makeLemma exprNum clist = SMT.not $ andAll $ map helper clist
 solveSetConstraints :: SMT.Solver -> CExpr -> IO ()
 solveSetConstraints s c
   --Declare our inclusion function
+  --SMT.simpleCommand s ["push"]
  = do
-  SMT.declareFun s "subsetof" [SMT.tInt, SMT.tInt] SMT.tBool
+  SMT.declareFun s "subsetof" [litType, litType] SMT.tBool
   --Assert the SMT version of our expression
   SMT.assert s $ formulaForCExpr exprFun c
   solverLoop
   where
     lits = literalsInCExpr c
+    toFloat = (fromIntegral :: Int -> Float)
+    numBits = ceiling $ logBase 2 (toFloat $ Set.size lits)
+    litType = SMT.tBits numBits
     exprs = exprsInCExpr c
     exprMap = Map.fromList $ zip (Set.toList exprs) [0 ..]
-    exprFun = SMT.int . (exprMap Map.!)
+    exprFun = (SMT.bvBin $ fromIntegral numBits) . (exprMap Map.!)
     solverLoop = do
       result <- SMT.check s
       case result of
@@ -54,9 +56,15 @@ solveSetConstraints s c
           litAssigns <-
             forM (Set.toList lits) $ \(lhs, rhs) -> do
               result <- SMT.getExpr s $ "subsetof" $$ [exprFun lhs, exprFun rhs]
-              case result of
-                SMT.Bool True -> return $ lhs `Sub` rhs
-                SMT.Bool False -> return $ lhs `NotSub` rhs
+              let resultBool =
+                    case result of
+                      SMT.Bool b -> b
+                      SMT.Bits _ v -> v == 1
+                      x ->
+                        error $ "Got bad boolean back from function: " ++ show x
+              case resultBool of
+                True -> return $ lhs `Sub` rhs
+                False -> return $ lhs `NotSub` rhs
           result <- Solver.makePred s litAssigns --TODO make better name
           case result of
             Left lemma -> do

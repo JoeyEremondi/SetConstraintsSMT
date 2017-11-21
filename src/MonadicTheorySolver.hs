@@ -44,15 +44,15 @@ makePrelude s n funPairs = do
   SMT.command s datatypeCommand
   return ()
 
---Builds up a function so we can iterate through all elements of our domain
---enumeratedDomainClauses :: ConfigM SMT.SExpr
+--Clauses asserting that our production checking function is correct
+--and asserting that each value in our domain is reachable through some production
 enumeratedDomainClauses funPairs = do
   results <-
     forM funPairs $ \(f, arity) -> do
       (num:fx:vars) <- forallVars $ arity + 2
       let prod = ("prod_" ++ f) $$ vars
       return $
-        ("isProduction" $$ [fx, prod]) <==>
+        ("isProduction" $$ [fx, prod]) ===
         ((fx === (f $$ vars)) /\ ("domain" $$ [fx]) /\
          (andAll $ map (\v -> "domain" $$ [v]) vars))
   --Assert that every x has a production
@@ -62,7 +62,7 @@ enumeratedDomainClauses funPairs = do
         ("domain" $$ [x]) ==> ("isProduction" $$ [x, "productionFor" $$ [x]])
   return $ (andAll results) /\ hasProd
 
-declareEnum :: SMT.Solver -> SMT.SExpr -> IO ()
+-- declareEnum :: SMT.Solver -> SMT.SExpr -> IO ()
 declareEnum s bvType = do
   SMT.declareFun s "isProduction" [bvType, SMT.Atom "Production"] SMT.tBool
   SMT.declareFun s "productionFor" [bvType] (SMT.Atom "Production")
@@ -170,7 +170,7 @@ unProd (SMT.Other (SMT.List [SMT.Atom "prod"])) = error "TODO"
 makePred :: SMT.Solver -> [Constr] -> IO (Either [Constr] TreeGrammar) --TODO return solution
 makePred s clist = do
   setOptions s
-  SMT.simpleCommand s ["push"]
+  --SMT.simpleCommand s ["push"]
   let subExprs = constrSubExprs clist
       numPreds = length subExprs
       numForall = 2 + maxArity subExprs

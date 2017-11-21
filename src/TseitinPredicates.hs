@@ -67,7 +67,7 @@ functionDomainClause e =
       fxs <- f $$$ xs
       lhs <- p e fxs
       rhs <- forM (zip args xs) $ \(ex, x) -> p ex x
-      let eqCond = lhs <==> (andAll rhs)
+      let eqCond = lhs === (andAll rhs)
         --Need constraint that no g(...) is in f(...) set
       gs <- differentFuns f
       neqConds <-
@@ -75,7 +75,7 @@ functionDomainClause e =
           xs <- forallVars ar
           gxs <- g $$$ xs
           lhs <- p e gxs
-          return (lhs <==> SMT.bool False)
+          return (lhs === SMT.bool False)
       return $ eqCond /\ andAll neqConds
     _ -> return $ SMT.bool True
 
@@ -87,17 +87,17 @@ booleanDomainClause varName e = do
     Neg e2 -> do
       pe <- p e x
       pe2 <- p e2 x
-      return $ pe <==> (SMT.bvNot pe2)
+      return $ pe === (SMT.bvNot pe2)
     Union a b -> do
       pe <- p e x
       pa <- p a x
       pb <- p b x
-      return $ pe <==> (pa \/ pb)
+      return $ pe === (pa \/ pb)
     Intersect a b -> do
       pe <- p e x
       pa <- p a x
       pb <- p b x
-      return $ pe <==> (pa /\ pb)
+      return $ pe === (pa /\ pb)
     Top -> do
       px <- p e x
       return px

@@ -10,8 +10,6 @@ f $$ args = SMT.List (SMT.Atom f : args)
 f $$$ [] = return (SMT.Atom f)
 f $$$ args = return $ SMT.List (SMT.Atom f : args)
 
-iff a b = (a ==> b) /\ (b ==> a)
-
 (===) = SMT.eq
 
 (/\) = SMT.and
@@ -20,14 +18,19 @@ iff a b = (a ==> b) /\ (b ==> a)
 
 (==>) = SMT.implies
 
-(<==>) = iff
-
 --tString = SMT.Atom "String"
 --tList t = "List" $$ [t]
 andAll l =
   case l of
     [] -> SMT.bool True
     _ -> "and" $$ l
+
+--tString = SMT.Atom "String"
+--tList t = "List" $$ [t]
+orAll l =
+  case l of
+    [] -> SMT.bool False
+    _ -> "or" $$ l
 
 -- string s = SMT.Atom $ ['"'] ++ s ++ ['"']
 -- slCons h t = "insert" $$ [t, h]

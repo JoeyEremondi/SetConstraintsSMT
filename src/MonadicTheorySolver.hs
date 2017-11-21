@@ -41,21 +41,16 @@ makePrelude s n funPairs = do
         SMT.readSExpr
           ("(declare-datatypes () ((Production " ++
            (List.intercalate " " variants) ++ ")))")
-  SMT.command s datatypeCommand
+  --SMT.command s datatypeCommand
   return ()
 
 --Clauses asserting that our production checking function is correct
 --and asserting that each value in our domain is reachable through some production
-enumeratedDomainClauses funPairs = do
-  results <-
-    forM funPairs $ \(f, arity) -> do
-      (num:fx:vars) <- forallVars $ arity + 2
-      return $
-        ((isFProduction f) $$ (fx : vars)) ===
-        ((fx === (f $$ vars)) /\ ("domain" $$ [fx]) /\
-         (andAll $ map (\v -> "domain" $$ [v]) vars))
+--TODO rename
+enumeratedDomainClauses funPairs
   --Assert that every x has a production
   --This makes sure our finite domain maps to the Herbrand domain
+ = do
   x <- forallVar
   --We or each of these conditions
   let hasProdConds =
@@ -63,7 +58,7 @@ enumeratedDomainClauses funPairs = do
           ("domain" $$ [x]) ==>
             ((isFProduction f) $$
              (x : [productionFor i $$ [x] | i <- [0 .. arity - 1]]))
-  return $ (andAll results) /\ (orAll hasProdConds)
+  return (orAll hasProdConds)
 
 isFProduction f = "isProductionFor-" ++ f
 
@@ -72,11 +67,17 @@ productionFor i = "productionFor" ++ show i
 declareEnum :: SMT.Solver -> SMT.SExpr -> [(String, Int)] -> Int -> IO ()
 declareEnum s bvType funPairs maxArity = do
   forM funPairs $ \(f, arity) -> do
-    SMT.declareFun
+    let prodFromName = "fromSymb"
+    let prodFrom = SMT.Atom prodFromName
+    let prodToNames = map (\i -> "toSymb-" ++ show i) [0 .. arity - 1]
+    let prodTos = map SMT.Atom prodToNames
+    SMT.defineFun
       s
       (isFProduction f)
-      (bvType : replicate arity bvType)
+      ((prodFromName, bvType) : zip prodToNames (repeat bvType))
       SMT.tBool
+      ((prodFrom === (f $$ prodTos)) /\ ("domain" $$ [prodFrom]) /\
+       (andAll $ map (\v -> "domain" $$ [v]) prodTos))
   forM [0 .. maxArity - 1] $ \argNum -> do
     SMT.declareFun s (productionFor argNum) [bvType] bvType
   return ()
@@ -231,12 +232,12 @@ makePred s clist = do
   SMT.declareFun s "functionDomain" [bvType] SMT.tBool
   SMT.defineFun s "domain" [("x", bvType)] SMT.tBool $
     ("booleanDomain" $$ [SMT.Atom "x"]) /\ ("functionDomain" $$ [SMT.Atom "x"])
-  --Declare functions to get the enumeration of our domain
-  declareEnum s bvType funPairs theMaxArity
   --Delare our constructors
   let funPairs = Map.toList $ arities state
   forM funPairs $ \(f, arity) -> do
     SMT.declareFun s f (replicate arity bvType) bvType
+  --Declare functions to get the enumeration of our domain and productions
+  declareEnum s bvType funPairs theMaxArity
   --Declare our existential variables
   forM (existentialVars state) $ \v -> do
     SMT.declare s v (SMT.tBits $ toInteger numPreds)

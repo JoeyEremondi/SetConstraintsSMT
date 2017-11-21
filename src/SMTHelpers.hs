@@ -27,7 +27,7 @@ iff a b = (a ==> b) /\ (b ==> a)
 andAll l =
   case l of
     [] -> SMT.bool True
-    _ -> foldr1 SMT.and $ filter (/= SMT.bool True) l
+    _ -> "and" $$ l
 
 -- string s = SMT.Atom $ ['"'] ++ s ++ ['"']
 -- slCons h t = "insert" $$ [t, h]

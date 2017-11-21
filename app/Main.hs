@@ -1,9 +1,10 @@
 module Main where
 
-import MonadicTheorySolver
 import qualified SimpleSMT as SMT
 import Syntax
 import System.Environment
+
+import SolveSetConstraints
 
 main :: IO ()
 main = do
@@ -13,9 +14,10 @@ main = do
           (_:"verbose":_) -> True
           _ -> False
   let cset =
-        [ (Var "L") `sup` (FunApp "null" [])
-        , (Var "L") `sup` (FunApp "cons" [Var "L"])
-        ]
+        ((Var "L") `sup` (FunApp "null" [])) `CAnd`
+        ((Var "L") `sup` (FunApp "cons" [Var "N", Var "L"])) `CAnd`
+        ((Var "N") `sup` (FunApp "Zero" [])) `CAnd`
+        ((Var "N") `sup` (FunApp "Succ" [Var "N"]))
   l <-
     SMT.newLogger $
     if verbose
@@ -29,5 +31,5 @@ main = do
           ["--lang=smt2", "--fmf-bound", "--incremental"]
           (Just l)
       _ -> SMT.newSolver "z3" ["-in"] (Just l)
-  result <- makePred s cset
-  putStrLn $ show result
+  solveSetConstraints s cset
+  -- putStrLn $ show result

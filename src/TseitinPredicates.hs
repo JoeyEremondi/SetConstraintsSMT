@@ -59,27 +59,9 @@ differentFuns f = do
   arMap <- arities <$> get
   return $ filter (\(g, _) -> g /= f) $ Map.toList arMap
 
-clauseForExpr :: Expr -> ConfigM SMT.SExpr
-clauseForExpr e =
+functionDomainClause :: Expr -> ConfigM SMT.SExpr
+functionDomainClause e =
   case e of
-    Var _ -> return $ SMT.bool True
-    Neg e2 -> do
-      x <- forallVar
-      pe <- p e x
-      pe2 <- p e2 x
-      return $ pe <==> (SMT.bvNot pe2)
-    Union a b -> do
-      x <- forallVar
-      pe <- p e x
-      pa <- p a x
-      pb <- p b x
-      return $ pe <==> (pa \/ pb)
-    Intersect a b -> do
-      x <- forallVar
-      pe <- p e x
-      pa <- p a x
-      pb <- p b x
-      return $ pe <==> (pa /\ pb)
     FunApp f args -> do
       xs <- forallVars (length args)
       fxs <- f $$$ xs
@@ -95,22 +77,42 @@ clauseForExpr e =
           lhs <- p e gxs
           return (lhs <==> SMT.bool False)
       return $ eqCond /\ andAll neqConds
+    _ -> return $ SMT.bool True
+
+booleanDomainClause :: String -> Expr -> ConfigM (SMT.SExpr)
+booleanDomainClause varName e = do
+  let x = SMT.Atom varName
+  case e of
+    Var _ -> return $ SMT.bool True
+    Neg e2 -> do
+      pe <- p e x
+      pe2 <- p e2 x
+      return $ pe <==> (SMT.bvNot pe2)
+    Union a b -> do
+      pe <- p e x
+      pa <- p a x
+      pb <- p b x
+      return $ pe <==> (pa \/ pb)
+    Intersect a b -> do
+      pe <- p e x
+      pa <- p a x
+      pb <- p b x
+      return $ pe <==> (pa /\ pb)
     Top -> do
-      x <- forallVar
       px <- p e x
       return px
     Bottom -> do
-      x <- forallVar
       px <- p e x
       return $ SMT.not px
+    _ -> return $ SMT.bool True
 
-constrClause :: Constr -> ConfigM SMT.SExpr
-constrClause (e1 `Sub` e2) = do
-  x <- forallVar
+constrClause :: String -> Constr -> ConfigM SMT.SExpr
+constrClause varName (e1 `Sub` e2) = do
+  let x = SMT.Atom varName
   pe1 <- p e1 x
   pe2 <- p e2 x
   return $ pe1 ==> pe2
-constrClause (e1 `NotSub` e2) = do
+constrClause varName (e1 `NotSub` e2) = do
   x <- fresh
   pe1 <- p e1 x
   pe2 <- p e2 x

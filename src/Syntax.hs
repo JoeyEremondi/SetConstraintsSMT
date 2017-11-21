@@ -40,8 +40,6 @@ data Constr
 
 -- pattern Sup :: Expr -> Expr -> Constr
 -- pattern Sup x y = Sub y x
-sup x y = Sub y x
-
 subExpressions :: Expr -> [Expr]
 subExpressions e = e : concatMap subExpressions (children e)
   where
@@ -105,6 +103,14 @@ data CExpr
   | CIff CExpr
          CExpr
 
+x `sub` y = CSubset x y
+
+x `notsub` y = CNot $ x `sub` y
+
+x `sup` y = CSubset y x
+
+x `notsup` y = y `notsub` x
+
 --Get the literals in a constraint expression
 literalsInCExpr :: CExpr -> Set.Set (Expr, Expr)
 literalsInCExpr (CSubset e1 e2) = Set.singleton (e1, e2)
@@ -119,3 +125,13 @@ literalsInCExpr (CImplies c1 c2) =
   (literalsInCExpr c1) `Set.union` literalsInCExpr c2
 literalsInCExpr (CIff c1 c2) =
   (literalsInCExpr c1) `Set.union` literalsInCExpr c2
+
+--Get the literals in a constraint expression
+exprsInCExpr :: CExpr -> Set.Set Expr
+exprsInCExpr (CSubset e1 e2) = Set.fromList [e1, e2]
+exprsInCExpr (CNot c) = exprsInCExpr c
+exprsInCExpr (CAnd c1 c2) = (exprsInCExpr c1) `Set.union` exprsInCExpr c2
+exprsInCExpr (COr c1 c2) = (exprsInCExpr c1) `Set.union` exprsInCExpr c2
+exprsInCExpr (CXor c1 c2) = (exprsInCExpr c1) `Set.union` exprsInCExpr c2
+exprsInCExpr (CImplies c1 c2) = (exprsInCExpr c1) `Set.union` exprsInCExpr c2
+exprsInCExpr (CIff c1 c2) = (exprsInCExpr c1) `Set.union` exprsInCExpr c2

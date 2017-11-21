@@ -21,6 +21,7 @@ import qualified Data.Maybe as Maybe
 import qualified SimpleSMT as SMT
 
 import SMTHelpers
+import TreeGrammar
 
 import Data.Char (isAlphaNum)
 import qualified Data.Set as Set
@@ -85,7 +86,8 @@ validDomain = do
   return $ andAll varResults
 
 setOptions s = do
-  SMT.simpleCommand s ["set-option", ":produce-unsat-cores", "true"]
+  return ()
+  --SMT.simpleCommand s ["set-option", ":produce-unsat-cores", "true"]
   return ()
 
 readValueList :: SMT.Solver -> SMT.SExpr -> IO [SMT.Value]
@@ -161,8 +163,11 @@ varProductions s v i n = do
         SMT.Unsat -> return accum
         _ -> error "TODO Failed quant"
 
+unProd :: SMT.Value -> (String, [Integer])
+unProd (SMT.Other (SMT.List [SMT.Atom "prod"])) = error "TODO"
+
 --TODO include constratailint stuff
-makePred :: SMT.Solver -> [Constr] -> IO (Maybe [(SMT.SExpr, SMT.Value)])
+makePred :: SMT.Solver -> [Constr] -> IO (Either [Constr] TreeGrammar) --TODO return solution
 makePred s clist = do
   setOptions s
   SMT.simpleCommand s ["push"]
@@ -175,22 +180,35 @@ makePred s clist = do
       state0 = (initialState vars subExprs)
       funPairs = (Map.toList . arities) state0
       allFreeVars :: [Expr] = filter isVar subExprs
+      boolDomArgName = "z_boolDomain"
   makePrelude s (toInteger numPreds) funPairs
-  let comp =
-        withNForalls vars (toInteger $ length subExprs) $ \vars -> do
-          predClauses <- forM subExprs clauseForExpr
-          subClauses <- forM clist $ constrClause
-          let allClauses = andAll (predClauses ++ subClauses)
-          isValidDomain <- validDomain
-          funClauses <- forM funPairs funClause
-          let singleFunClause = andAll funClauses
-          enumClauses <- enumeratedDomainClauses funPairs
-          return $
-            (isValidDomain ==> allClauses) /\ singleFunClause /\ enumClauses
-      (exprPreds, state) = runState comp state0
+  let comp = do
+        boolDomPreds <- forM subExprs (booleanDomainClause boolDomArgName)
+        constrPreds <- forM clist (constrClause boolDomArgName)
+        funDomPreds <-
+          withNForalls vars (toInteger $ length subExprs) $ \vars -> do
+            predClauses <- forM subExprs functionDomainClause
+            isValidDomain <- validDomain
+            funClauses <- forM funPairs funClause
+            let singleFunClause = andAll funClauses
+            enumClauses <- enumeratedDomainClauses funPairs
+            return $
+              (isValidDomain ==> (andAll predClauses)) /\ singleFunClause /\
+              enumClauses
+        return (funDomPreds, andAll $ boolDomPreds ++ constrPreds)
+  let ((funDomPreds, boolDomPreds), state) = runState comp state0
   --Declare each of our existential variables 
   --Declare our domain function
-  SMT.declareFun s "domain" [SMT.tBits $ toInteger numPreds] SMT.tBool
+  --We separate it into a quantified part and non quantified part
+  SMT.defineFun
+    s
+    "booleanDomain"
+    [(boolDomArgName, SMT.tBits $ toInteger numPreds)]
+    SMT.tBool
+    boolDomPreds
+  SMT.declareFun s "functionDomain" [SMT.tBits $ toInteger numPreds] SMT.tBool
+  SMT.defineFun s "domain" [("x", SMT.tBits (toInteger numPreds))] SMT.tBool $
+    ("booleanDomain" $$ [SMT.Atom "x"]) /\ ("functionDomain" $$ [SMT.Atom "x"])
   --Declare functions to get the enumeration of our domain
   declareEnum s tBitVec
   --Delare our constructors
@@ -203,7 +221,7 @@ makePred s clist = do
     --Assert that each existential variable is in our domain
     SMT.assert s $ "domain" $$ [SMT.Atom v]
   --Assert our domain properties
-  SMT.assert s exprPreds
+  SMT.assert s funDomPreds
   result <- SMT.check s
   --TODO minimize?
   case result of
@@ -217,8 +235,8 @@ makePred s clist = do
       forM allFreeVars $ \v -> do
         prods <- varProductions s v ((predNums state) Map.! v) numPreds
         forM prods $ \prod -> putStrLn $ show v ++ "  ->  " ++ vshow prod
-      return Nothing --TODO fix
+      return $ Right $ error "TODO " --() --TODO return solution
     SMT.Unsat -> do
       SMT.command s $ SMT.List [SMT.Atom "get-unsat-core"]
-      return Nothing
+      return $ Left clist --TODO niminize lemma
     SMT.Unknown -> error "Failed to solve quanitification"

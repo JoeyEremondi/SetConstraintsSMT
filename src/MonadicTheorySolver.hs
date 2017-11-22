@@ -46,23 +46,21 @@ makePrelude s n funPairs = do
 --Clauses asserting that our production checking function is correct
 --and asserting that each value in our domain is reachable through some production
 --TODO rename
-enumeratedDomainClauses funPairs
-  --Assert that every x has a production
-  --This makes sure our finite domain maps to the Herbrand domain
- = do
-  x <- forallVar
-  --We or each of these conditions
-  let hasProdConds =
-        (flip map) funPairs $ \(f, arity) -> do
-          ("domain" $$ [x]) ==>
-            ((isFProduction f) $$
-             (x : [productionFor i $$ [x] | i <- [0 .. arity - 1]]))
-  return (orAll hasProdConds)
-
+-- enumeratedDomainClauses funPairs
+--   --Assert that every x has a production
+--   --This makes sure our finite domain maps to the Herbrand domain
+--  = do
+--   x <- forallVar
+--   --We or each of these conditions
+--   let hasProdConds =
+--         (flip map) funPairs $ \(f, arity) -> do
+--           ("domain" $$ [x]) ==>
+--             ((isFProduction f) $$
+--              (x : [productionFor i $$ [x] | i <- [0 .. arity - 1]]))
+--   return (orAll hasProdConds)
 isFProduction f = "isProductionFor-" ++ f
 
-productionFor i = "productionFor" ++ show i
-
+--productionFor i = "productionFor" ++ show i
 declareEnum :: SMT.Solver -> SExpr -> [(String, Int)] -> Int -> IO ()
 declareEnum s bvType funPairs maxArity = do
   forM funPairs $ \(f, arity) -> do
@@ -77,8 +75,8 @@ declareEnum s bvType funPairs maxArity = do
       SMT.tBool
       ((prodFrom === (f $$ prodTos)) /\ ("domain" $$ [prodFrom]) /\
        (andAll $ map (\v -> "domain" $$ [v]) prodTos))
-  forM [0 .. maxArity - 1] $ \argNum -> do
-    SMT.declareFun s (productionFor argNum) [bvType] bvType
+  -- forM [0 .. maxArity - 1] $ \argNum -> do
+  --   SMT.declareFun s (productionFor argNum) [bvType] bvType
   return ()
 
 withNForalls ::
@@ -206,10 +204,8 @@ makePred s clist
             isValidDomain <- validDomain
             funClauses <- forM funPairs funClause
             let singleFunClause = andAll funClauses
-            enumClauses <- enumeratedDomainClauses funPairs
-            return $
-              (isValidDomain ==> (andAll predClauses)) /\ singleFunClause /\
-              enumClauses
+            -- enumClauses <- enumeratedDomainClauses funPairs
+            return $ (isValidDomain ==> (andAll predClauses)) /\ singleFunClause
         return (funDomPreds, andAll $ boolDomPredList ++ constrPreds)
   let ((funDomPreds, boolDomPreds), state) = runState comp state0
   --Declare each of our existential variables 

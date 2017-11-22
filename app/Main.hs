@@ -14,10 +14,14 @@ main = do
           (_:"verbose":_) -> True
           _ -> False
   let cset =
-        ((Var "N") `sup` (FunApp "zero" [])) `CAnd`
-        ((Var "N") `sup` (FunApp "succ" [Var "N"])) --`CAnd`
-        -- ((Var "L") `sup` (FunApp "null" [])) `CAnd`
-        -- ((Var "L") `sup` (FunApp "cons" [Var "N", Var "L"]))
+        CAnd
+          [ ((Var "N") `eq`
+             ((FunApp "zero" []) `Union` (FunApp "succ" [Var "N"])))
+          , ((Var "L") `eq`
+             ((FunApp "listNull" []) `Union`
+              ((FunApp "cons" [Var "N", Var "L"]))))
+          --, 
+          ]
   l <-
     SMT.newLogger $
     if verbose

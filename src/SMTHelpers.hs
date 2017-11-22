@@ -23,6 +23,7 @@ f $$$ args = return $ SMT.List (SMT.Atom f : args)
 andAll l =
   case l of
     [] -> SMT.bool True
+    [x] -> x
     _ -> "and" $$ l
 
 --tString = SMT.Atom "String"
@@ -30,6 +31,7 @@ andAll l =
 orAll l =
   case l of
     [] -> SMT.bool False
+    [x] -> x
     _ -> "or" $$ l
 
 -- string s = SMT.Atom $ ['"'] ++ s ++ ['"']
@@ -50,3 +52,7 @@ vshow x =
     SMT.Bool b -> show b
     SMT.Int i -> show i
     SMT.Other s -> sshow s
+
+boolToBit :: Int -> SMT.SExpr -> Integer -> SMT.SExpr
+boolToBit n b shift =
+  (SMT.ite b (SMT.bvShl (SMT.bvBin n 1) (SMT.bvBin n shift)) (SMT.bvBin n 0))

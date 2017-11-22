@@ -19,6 +19,7 @@ import qualified Data.Map as Map
 import Data.Map ((!))
 import qualified Data.Maybe as Maybe
 import qualified SimpleSMT as SMT
+import SimpleSMT (SExpr)
 
 import SMTHelpers
 import TreeGrammar
@@ -27,8 +28,6 @@ import Data.Char (isAlphaNum)
 import qualified Data.Set as Set
 
 makePrelude s n funPairs = do
-  SMT.defineFun s "bitToBool" [("b", SMT.tBits 1)] SMT.tBool $
-    (SMT.bvBin 1 1 `SMT.eq` SMT.Atom "b")
   let bvTypeS = sshow $ SMT.tBits n
   let variants =
         (flip map) funPairs $ \(f, arity) ->
@@ -64,7 +63,7 @@ isFProduction f = "isProductionFor-" ++ f
 
 productionFor i = "productionFor" ++ show i
 
-declareEnum :: SMT.Solver -> SMT.SExpr -> [(String, Int)] -> Int -> IO ()
+declareEnum :: SMT.Solver -> SExpr -> [(String, Int)] -> Int -> IO ()
 declareEnum s bvType funPairs maxArity = do
   forM funPairs $ \(f, arity) -> do
     let prodFromName = "fromSymb"
@@ -83,28 +82,20 @@ declareEnum s bvType funPairs maxArity = do
   return ()
 
 withNForalls ::
-     [SMT.SExpr]
-  -> Integer
-  -> ([SMT.SExpr] -> ConfigM SMT.SExpr)
-  -> ConfigM SMT.SExpr
+     [SExpr] -> Integer -> ([SExpr] -> ConfigM SExpr) -> ConfigM SExpr
 withNForalls vars numBits comp = do
   result <- comp vars
   return $ SMT.List $ [SMT.Atom "forall", SMT.List (varTypes), result]
   where
     varTypes = map (\x -> SMT.List [x, SMT.tBits numBits]) vars
 
-validDomain :: ConfigM SMT.SExpr
+validDomain :: ConfigM SExpr
 validDomain = do
   vars <- universalVars <$> get
   varResults <- forM vars (\x -> "domain" $$$ [x])
   return $ andAll varResults
 
-setOptions s = do
-  return ()
-  --SMT.simpleCommand s ["set-option", ":produce-unsat-cores", "true"]
-  return ()
-
-readValueList :: SMT.Solver -> SMT.SExpr -> IO [SMT.Value]
+readValueList :: SMT.Solver -> SExpr -> IO [SMT.Value]
 readValueList s sexp = helper sexp []
   where
     helper sexp accum = do
@@ -115,7 +106,7 @@ readValueList s sexp = helper sexp []
           hd <- SMT.getExpr s ("head" $$ [sexp])
           helper ("tail" $$ [sexp]) $ accum ++ [hd]
 
-enumerateDomain :: SMT.Solver -> SMT.SExpr -> IO [SMT.Value]
+enumerateDomain :: SMT.Solver -> SExpr -> IO [SMT.Value]
 enumerateDomain s bvType = do
   SMT.simpleCommand s ["push"]
   SMT.declare s ("domain-val") bvType
@@ -136,7 +127,7 @@ enumerateDomain s bvType = do
         _ -> error "TODO Failed quant enumerating domain"
 
 enumerateProductions ::
-     SMT.Solver -> SMT.SExpr -> SMT.SExpr -> (String, Int) -> IO [[SMT.Value]]
+     SMT.Solver -> SExpr -> SExpr -> (String, Int) -> IO [[SMT.Value]]
 enumerateProductions s fromSymbol bvType (f, arity) = do
   SMT.simpleCommand s ["push"]
   forM allArgNums $ \argNum -> SMT.declare s (argName argNum) bvType
@@ -190,9 +181,9 @@ unProd (SMT.Other (SMT.List [SMT.Atom "prod"])) = error "TODO"
 
 --TODO include constratailint stuff
 makePred :: SMT.Solver -> [Constr] -> IO (Either [Constr] TreeGrammar) --TODO return solution
-makePred s clist = do
-  setOptions s
-  --SMT.simpleCommand s ["push"]
+makePred s clist
+  --setOptions s
+ = do
   let subExprs = constrSubExprs clist
       numPreds = length subExprs
       theMaxArity = maxArity subExprs
@@ -204,9 +195,10 @@ makePred s clist = do
       funPairs = (Map.toList . arities) state0
       allFreeVars :: [Expr] = filter isVar subExprs
       boolDomArgName = "z_boolDomain"
+  putStrLn $ "ALL FUNS" ++ show funPairs
   makePrelude s (toInteger numPreds) funPairs
   let comp = do
-        boolDomPreds <- forM subExprs (booleanDomainClause boolDomArgName)
+        boolDomPredList <- forM subExprs (booleanDomainClause boolDomArgName)
         constrPreds <- forM clist (constrClause boolDomArgName)
         funDomPreds <-
           withNForalls vars (toInteger $ length subExprs) $ \vars -> do
@@ -218,7 +210,7 @@ makePred s clist = do
             return $
               (isValidDomain ==> (andAll predClauses)) /\ singleFunClause /\
               enumClauses
-        return (funDomPreds, andAll $ boolDomPreds ++ constrPreds)
+        return (funDomPreds, andAll $ boolDomPredList ++ constrPreds)
   let ((funDomPreds, boolDomPreds), state) = runState comp state0
   --Declare each of our existential variables 
   --Declare our domain function
@@ -235,7 +227,59 @@ makePred s clist = do
   --Delare our constructors
   let funPairs = Map.toList $ arities state
   forM funPairs $ \(f, arity) -> do
-    SMT.declareFun s f (replicate arity bvType) bvType
+    let allArgNums = [0 .. arity - 1]
+    let allBitNums = [0 .. (toInteger numPreds) - 1]
+    let allArgs = map (\arg -> SMT.Atom $ "f-arg-" ++ show arg) allArgNums
+    let ithBitFun i = f ++ "-bit-" ++ show i
+    let bitFor expr = (predNums state) Map.! expr
+    --Declare ith bit functions before we define
+    --Define the ith-bit functions for our constructor
+    forM (reverse subExprs) $ \expr -> do
+      case expr of
+        Var v -> do
+          SMT.declareFun
+            s
+            (ithBitFun $ bitFor expr)
+            (replicate arity bvType)
+            SMT.tBool
+          return ()
+        _ -> do
+          let funBody =
+                case expr of
+                  e1 `Union` e2 ->
+                    ((ithBitFun $ bitFor e1) $$ allArgs) \/
+                    ((ithBitFun $ bitFor e2) $$ allArgs)
+                  e1 `Intersect` e2 ->
+                    ((ithBitFun $ bitFor e1) $$ allArgs) /\
+                    ((ithBitFun $ bitFor e2) $$ allArgs)
+                  Neg e1 -> SMT.not ((ithBitFun $ bitFor e1) $$ allArgs)
+                  FunApp g gargs
+                    | f == g ->
+                      andAll $
+                      (flip map)
+                        (zip gargs allArgs)
+                        (\(setArg, inputArg) ->
+                           ithBit (bitFor setArg) inputArg numPreds)
+                    | f /= g -> SMT.bool False
+                  Top -> SMT.bool True
+                  Bottom -> SMT.bool False
+          SMT.defineFun
+            s
+            (ithBitFun $ bitFor expr)
+            (zip (map (\i -> "f-arg-" ++ show i) allArgNums) $ repeat bvType)
+            SMT.tBool
+            funBody
+          return ()
+    --Define the constructor as the OR or the bit-shift of its bit functions
+    SMT.defineFun
+      s
+      f
+      (zip (map (\i -> "f-arg-" ++ show i) allArgNums) $ repeat bvType)
+      bvType
+      ("bvor" $$
+       (map
+          (\bit -> boolToBit numPreds (ithBitFun bit $$ allArgs) bit)
+          allBitNums))
   --Declare functions to get the enumeration of our domain and productions
   declareEnum s bvType funPairs theMaxArity
   --Declare our existential variables
@@ -264,6 +308,5 @@ makePred s clist = do
         forM prods $ \prod -> putStrLn $ show v ++ "  ->  " ++ vshow prod
       return $ Right $ error "TODO " --() --TODO return solution
     SMT.Unsat -> do
-      SMT.command s $ SMT.List [SMT.Atom "get-unsat-core"]
       return $ Left clist --TODO niminize lemma
     SMT.Unknown -> error "Failed to solve quanitification"

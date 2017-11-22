@@ -92,12 +92,9 @@ data CExpr
   = CSubset Expr
             Expr
   | CNot CExpr
-  | CAnd CExpr
-         CExpr
-  | COr CExpr
-        CExpr
-  | CXor CExpr
-         CExpr
+  | CAnd [CExpr]
+  | COr [CExpr]
+  | CXor [CExpr]
   | CImplies CExpr
              CExpr
   | CIff CExpr
@@ -111,18 +108,17 @@ x `sup` y = CSubset y x
 
 x `notsup` y = y `notsub` x
 
+x `eq` y = CAnd [x `sub` y, y `sub` x]
+
+x `neq` y = COr [x `notsub` y, y `notsub` x]
+
 --Get the literals in a constraint expression
 literalsInCExpr :: CExpr -> Set.Set (Expr, Expr)
 literalsInCExpr (CSubset e1 e2) = Set.singleton (e1, e2)
 literalsInCExpr (CNot c) = literalsInCExpr c
-literalsInCExpr (CAnd c1 c2) =
-  (literalsInCExpr c1) `Set.union` literalsInCExpr c2
-literalsInCExpr (COr c1 c2) =
-  (literalsInCExpr c1) `Set.union` literalsInCExpr c2
-literalsInCExpr (CXor c1 c2) =
-  (literalsInCExpr c1) `Set.union` literalsInCExpr c2
-literalsInCExpr (CImplies c1 c2) =
-  (literalsInCExpr c1) `Set.union` literalsInCExpr c2
+literalsInCExpr (CAnd cexprs) = Set.unions $ map literalsInCExpr cexprs
+literalsInCExpr (COr cexprs) = Set.unions $ map literalsInCExpr cexprs
+literalsInCExpr (CXor cexprs) = Set.unions $ map literalsInCExpr cexprs
 literalsInCExpr (CIff c1 c2) =
   (literalsInCExpr c1) `Set.union` literalsInCExpr c2
 
@@ -130,8 +126,8 @@ literalsInCExpr (CIff c1 c2) =
 exprsInCExpr :: CExpr -> Set.Set Expr
 exprsInCExpr (CSubset e1 e2) = Set.fromList [e1, e2]
 exprsInCExpr (CNot c) = exprsInCExpr c
-exprsInCExpr (CAnd c1 c2) = (exprsInCExpr c1) `Set.union` exprsInCExpr c2
-exprsInCExpr (COr c1 c2) = (exprsInCExpr c1) `Set.union` exprsInCExpr c2
-exprsInCExpr (CXor c1 c2) = (exprsInCExpr c1) `Set.union` exprsInCExpr c2
+exprsInCExpr (CAnd cexprs) = Set.unions $ map exprsInCExpr cexprs
+exprsInCExpr (COr cexprs) = Set.unions $ map exprsInCExpr cexprs
+exprsInCExpr (CXor cexprs) = Set.unions $ map exprsInCExpr cexprs
 exprsInCExpr (CImplies c1 c2) = (exprsInCExpr c1) `Set.union` exprsInCExpr c2
 exprsInCExpr (CIff c1 c2) = (exprsInCExpr c1) `Set.union` exprsInCExpr c2

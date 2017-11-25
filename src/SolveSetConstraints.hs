@@ -36,9 +36,11 @@ makeLemma exprNum clist = SMT.not $ andAll $ map helper clist
           (Fun "subsetof") $$ (unwrap (exprNum e1) ++ unwrap (exprNum e2))
 
 --intToBits :: Integral i => i -> String
-intToBits i = BitVector $ map bitToSexp asBinaryString
+intToBits n i = BitVector $ map bitToSexp paddedBinaryString
   where
     asBinaryString = showIntAtBase 2 intToDigit i ""
+    paddedBinaryString =
+      reverse $ take n $ (reverse asBinaryString) ++ repeat '0'
     bitToSexp '0' = SMT.bool False
     bitToSexp '1' = SMT.bool True
 
@@ -60,7 +62,7 @@ solveSetConstraints s c
     litType = replicate numBits SMT.tBool
     exprs = exprsInCExpr c
     exprMap = Map.fromList $ zip (Set.toList exprs) [0 ..]
-    exprFun = (intToBits) . (exprMap Map.!)
+    exprFun = (intToBits numBits) . (exprMap Map.!)
     solverLoop = do
       result <- SMT.check s
       case result of

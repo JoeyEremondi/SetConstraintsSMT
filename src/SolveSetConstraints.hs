@@ -1,17 +1,20 @@
 module SolveSetConstraints where
 
 import Control.Monad
+import Data.Char (intToDigit)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified MonadicTheorySolver as Solver
+import Numeric (showIntAtBase)
 import SMTHelpers
 import qualified SimpleSMT as SMT
 import Syntax
 
-formulaForCExpr :: (Expr -> SMT.SExpr) -> CExpr -> SMT.SExpr
+formulaForCExpr :: (Expr -> BitVector) -> CExpr -> SMT.SExpr
 formulaForCExpr exprNum cexp =
   case cexp of
-    (s1 `CSubset` s2) -> (Fun "subsetof") $$ [exprNum s1, exprNum s2]
+    (s1 `CSubset` s2) ->
+      (Fun "subsetof") $$ (unwrap (exprNum s1) ++ unwrap (exprNum s2))
     (CAnd cexprs) -> andAll $ map self cexprs
     (COr cexprs) -> orAll $ map self cexprs
     (c1 `CImplies` c2) -> self c1 ==> self c2
@@ -21,22 +24,32 @@ formulaForCExpr exprNum cexp =
   where
     self = formulaForCExpr exprNum
 
-makeLemma :: (Expr -> SMT.SExpr) -> [Constr] -> SMT.SExpr
+makeLemma :: (Expr -> BitVector) -> [Constr] -> SMT.SExpr
 makeLemma exprNum clist = SMT.not $ andAll $ map helper clist
   where
     helper c =
       case c of
-        e1 `Sub` e2 -> (Fun "subsetof") $$ [exprNum e1, exprNum e2]
-        e1 `NotSub` e2 -> SMT.not $ (Fun "subsetof") $$ [exprNum e1, exprNum e2]
+        e1 `Sub` e2 ->
+          (Fun "subsetof") $$ (unwrap (exprNum e1) ++ unwrap (exprNum e2))
+        e1 `NotSub` e2 ->
+          SMT.not $
+          (Fun "subsetof") $$ (unwrap (exprNum e1) ++ unwrap (exprNum e2))
+
+--intToBits :: Integral i => i -> String
+intToBits i = BitVector $ map bitToSexp asBinaryString
+  where
+    asBinaryString = showIntAtBase 2 intToDigit i ""
+    bitToSexp '0' = SMT.bool False
+    bitToSexp '1' = SMT.bool True
 
 solveSetConstraints :: SMT.Solver -> CExpr -> IO ()
 solveSetConstraints s c
   --Declare our inclusion function
   --
  = do
-  SMT.simpleCommand s ["set-logic", "UFBV"]
+  SMT.simpleCommand s ["set-logic", "UF"]
   SMT.simpleCommand s ["push"]
-  SMT.declareFun s "subsetof" [litType, litType] SMT.tBool
+  SMT.declareFun s "subsetof" (litType ++ litType) SMT.tBool
   --Assert the SMT version of our expression
   SMT.assert s $ formulaForCExpr exprFun c
   solverLoop
@@ -44,10 +57,10 @@ solveSetConstraints s c
     lits = literalsInCExpr c
     toFloat = (fromIntegral :: Int -> Float)
     numBits = ceiling $ logBase 2 (toFloat $ Set.size lits)
-    litType = SMT.tBits numBits
+    litType = replicate numBits SMT.tBool
     exprs = exprsInCExpr c
     exprMap = Map.fromList $ zip (Set.toList exprs) [0 ..]
-    exprFun = (SMT.bvBin $ fromIntegral numBits) . (exprMap Map.!)
+    exprFun = (intToBits) . (exprMap Map.!)
     solverLoop = do
       result <- SMT.check s
       case result of
@@ -58,7 +71,9 @@ solveSetConstraints s c
           litAssigns <-
             forM (Set.toList lits) $ \(lhs, rhs) -> do
               result <-
-                SMT.getExpr s $ (Fun "subsetof") $$ [exprFun lhs, exprFun rhs]
+                SMT.getExpr s $
+                (Fun "subsetof") $$
+                (unwrap (exprFun lhs) ++ unwrap (exprFun rhs))
               let resultBool =
                     case result of
                       SMT.Bool b -> b

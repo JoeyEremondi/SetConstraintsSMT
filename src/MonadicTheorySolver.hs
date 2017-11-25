@@ -159,7 +159,7 @@ enumerateProductions s fromSymbol bvType (f, arity) = do
         SMT.Unsat -> return accum
         _ -> error "TODO Failed quant"
 
-varProductions :: SMT.Solver -> Expr -> Integer -> Int -> IO [[SMT.Value]]
+varProductions :: SMT.Solver -> Expr -> Integer -> Int -> IO [BitVector]
 varProductions s v i n = do
   SMT.simpleCommand s ["push"]
   declareVec s vname $ makeBvType n
@@ -175,11 +175,9 @@ varProductions s v i n = do
       result <- SMT.check s
       case result of
         SMT.Sat -> do
-          prodBits <- forM (unwrap matchingVal) $ \bit -> (SMT.getExpr s bit)
-          let prodEqConds =
-                zipWith (===) (map SMT.value prodBits) (unwrap matchingVal)
-          SMT.assert s (SMT.not (andAll prodEqConds))
-          helper (prodBits : accum)
+          prod <- getBitVec s matchingVal
+          SMT.assert s (SMT.not (prod `vecEq` matchingVal))
+          helper (prod : accum)
         SMT.Unsat -> return accum
         _ -> error "TODO Failed quant"
 
@@ -306,10 +304,10 @@ makePred s clist
         forM funPairs $ \funPair@(f, arity) -> do
           prodsFrom <- enumerateProductions s d bvType funPair
           forM prodsFrom $ \p ->
-            putStrLn $ show d ++ "  ->  " ++ show f ++ "(" ++ show p ++ ")"
+            putStrLn $ show d ++ "  ->  " ++ show f ++ show p
       forM allFreeVars $ \v -> do
         prods <- varProductions s v ((predNums state) Map.! v) numPreds
-        forM prods $ \prod -> putStrLn $ show v ++ "  ->  " ++ (show prod)
+        forM prods $ \prod -> putStrLn $ varName v ++ "  ->  " ++ (show prod)
       return $ Right $ error "TODO " --() --TODO return solution
     SMT.Unsat -> do
       return $ Left clist --TODO niminize lemma

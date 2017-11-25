@@ -6,6 +6,14 @@ import System.Environment
 
 import SolveSetConstraints
 
+zero = VecFun "zero"
+
+ssucc = VecFun "succ"
+
+listNull = VecFun "listNull"
+
+ccons = VecFun "ccons"
+
 main :: IO ()
 main = do
   args <- getArgs
@@ -15,11 +23,9 @@ main = do
           _ -> False
   let cset =
         CAnd
-          [ ((Var "N") `eq`
-             ((FunApp "zero" []) `Union` (FunApp "succ" [Var "N"])))
+          [ ((Var "N") `eq` ((FunApp zero []) `Union` (FunApp ssucc [Var "N"])))
           , ((Var "L") `eq`
-             ((FunApp "listNull" []) `Union`
-              ((FunApp "cons" [Var "N", Var "L"]))))
+             ((FunApp listNull []) `Union` ((FunApp ccons [Var "N", Var "L"]))))
           --, 
           ]
   l <-

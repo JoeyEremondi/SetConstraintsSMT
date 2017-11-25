@@ -1,7 +1,7 @@
 module TseitinPredicates where
 
 import SMTHelpers
-import qualified SimpleSMT as SMT
+import qualified SimpleSMT as SMT hiding (bvBin, tBits)
 import Syntax
 
 import Control.Monad.State
@@ -16,11 +16,19 @@ import SMTHelpers
 import Data.Char (isAlphaNum)
 import qualified Data.Set as Set
 
+import Debug.Trace (trace)
+
+domain = Fun "domain"
+
+booleanDomain = Fun "booleanDomain"
+
+funDomain = Fun "functionDomain"
+
 -- type SBVec = SMT.BitVec
 data PredNumConfig = Config
   { predNums :: Map.Map Expr Integer
-  , arities :: Map.Map String Int
-  , universalVars :: [SMT.SExpr]
+  , arities :: Map.Map VecFun Int
+  , universalVars :: [BitVector]
   , existentialVars :: [String]
   }
 
@@ -29,59 +37,54 @@ getNumPreds = (Map.size . predNums) <$> get
 
 type ConfigM = State PredNumConfig
 
-arity :: String -> ConfigM Int
+arity :: VecFun -> ConfigM Int
 arity f = ((Map.! f) . arities) <$> get
 
-p :: Expr -> SMT.SExpr -> ConfigM SMT.SExpr
+p :: Expr -> BitVector -> ConfigM SMT.SExpr
 p e x = do
   n <- getNumPreds
   i <- ((Map.! e) . predNums) <$> get
     -- let xi = SMT.extract x (toInteger i) (toInteger i)
   return $ ithBit i x n
 
-ithBit i x n = (SMT.not $ (x `SMT.bvAnd` mask) `SMT.eq` SMT.bvBin n 0)
-  where
-    mask = SMT.bvBin n $ 2 ^ i
+ithBit i (BitVector x) n = x List.!! (fromInteger i)
 
-forallVar :: ConfigM SMT.SExpr
+forallVar :: ConfigM BitVector
 forallVar = do
-  vars <- (universalVars) <$> get
-  return $
-    case vars of
-      [] -> error "No Forall vars"
-      h:_ -> h
+  [v] <- forallVars 1
+  return v
 
-forallVars :: Int -> ConfigM [SMT.SExpr]
+forallVars :: Int -> ConfigM [BitVector]
 forallVars n = (take n . universalVars) <$> get
 
-differentFuns :: String -> ConfigM [(String, Int)]
+differentFuns :: VecFun -> ConfigM [(VecFun, Int)]
 differentFuns f = do
   arMap <- arities <$> get
   return $ filter (\(g, _) -> g /= f) $ Map.toList arMap
 
 functionDomainClause :: Expr -> ConfigM SMT.SExpr
-functionDomainClause e =
+functionDomainClause e = do
+  n <- getNumPreds
   case e of
     FunApp f args -> do
       xs <- forallVars (length args)
-      fxs <- f $$$ xs
+      let fxs = bvApply n f xs
       lhs <- p e fxs
       rhs <- forM (zip args xs) $ \(ex, x) -> p ex x
-      let eqCond = lhs === (andAll rhs)
         --Need constraint that no g(...) is in f(...) set
+      let eqCond = andAll rhs === lhs
       gs <- differentFuns f
       neqConds <-
         forM gs $ \(g, ar) -> do
           xs <- forallVars ar
-          gxs <- g $$$ xs
+          let gxs = bvApply n g xs
           lhs <- p e gxs
           return (lhs === SMT.bool False)
       return $ eqCond /\ andAll neqConds
     _ -> return $ SMT.bool True
 
-booleanDomainClause :: String -> Expr -> ConfigM (SMT.SExpr)
-booleanDomainClause varName e = do
-  let x = SMT.Atom varName
+booleanDomainClause :: BitVector -> Expr -> ConfigM (SMT.SExpr)
+booleanDomainClause x e = do
   case e of
     Var _ -> return $ SMT.bool True
     Neg e2 -> do
@@ -106,23 +109,23 @@ booleanDomainClause varName e = do
       return $ SMT.not px
     _ -> return $ SMT.bool True
 
-constrClause :: String -> Constr -> ConfigM SMT.SExpr
-constrClause varName (e1 `Sub` e2) = do
-  let x = SMT.Atom varName
+constrClause :: BitVector -> Constr -> ConfigM SMT.SExpr
+constrClause x (e1 `Sub` e2) = do
   pe1 <- p e1 x
   pe2 <- p e2 x
   return $ pe1 ==> pe2
-constrClause varName (e1 `NotSub` e2) = do
+constrClause _ (e1 `NotSub` e2) = do
   x <- fresh
   pe1 <- p e1 x
   pe2 <- p e2 x
   return $ pe1 /\ (SMT.not pe2)
 
-funClause :: (String, Int) -> ConfigM SMT.SExpr
+funClause :: (VecFun, Int) -> ConfigM SMT.SExpr
 funClause (f, arity) = do
+  n <- getNumPreds
   xs <- forallVars arity
-  fxs <- (f $$$ xs)
-  "domain" $$$ [fxs]
+  let fxs = bvApply n f xs
+  return $ domain $$ (unwrap fxs)
 
 initialState vars exprs =
   Config
@@ -132,14 +135,15 @@ initialState vars exprs =
   , existentialVars = []
   }
 
-fresh :: ConfigM SMT.SExpr
+fresh :: ConfigM BitVector
 fresh = do
   state <- get
+  n <- getNumPreds
   let oldVars = existentialVars state
       takenVars = Set.fromList oldVars
-      varNames = map (\i -> "x_exists_" ++ show i) [1 ..]
+      varNames = map (\i -> "x_exists_" ++ show i) [0 ..]
       validVars = filter (\x -> not $ x `Set.member` takenVars) varNames
       newVar = head validVars
       newState = state {existentialVars = newVar : oldVars}
   put newState
-  return $ SMT.Atom newVar
+  return $ BitVector [SMT.Atom (newVar ++ show i) | i <- [0 .. n - 1]]

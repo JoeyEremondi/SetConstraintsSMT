@@ -17,6 +17,13 @@ import qualified Data.Maybe as Maybe
 import Data.Char (isAlphaNum)
 import qualified Data.Set as Set
 
+newtype VecFun = VecFun
+  { unVecFun :: String
+  } deriving (Eq, Ord, Read)
+
+instance Show VecFun where
+  show = unVecFun
+
 --listInDomain n l = andAll $ map (\i -> "domain" $$ [nthElem l i]) [0 .. n - 1]
 data Expr
   = Var String
@@ -25,7 +32,7 @@ data Expr
   | Intersect Expr
               Expr
   | Neg Expr
-  | FunApp String
+  | FunApp VecFun
            [Expr]
   | Top
   | Bottom
@@ -75,7 +82,7 @@ maxArity es = List.maximum $ (0 :) $ Maybe.catMaybes $ List.map getArity es
     getArity (FunApp f x) = Just $ length x
     getArity _ = Nothing
 
-getArities :: [Expr] -> Map.Map String Int
+getArities :: [Expr] -> Map.Map VecFun Int
 getArities exprs = Map.fromList $ Maybe.catMaybes $ map appPair exprs
   where
     appPair (FunApp f l) = Just (f, length l)

@@ -120,6 +120,7 @@ constrClause _ (e1 `NotSub` e2) = do
   pe2 <- p e2 x
   return $ pe1 /\ (SMT.not pe2)
 
+--Assert that the given function is closed over the domain
 funClause :: (VecFun, Int) -> ConfigM SMT.SExpr
 funClause (f, arity) = do
   n <- getNumPreds

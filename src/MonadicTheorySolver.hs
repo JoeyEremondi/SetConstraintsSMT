@@ -72,7 +72,7 @@ declareProdFuncions s numPreds bvType funPairs maxArity = do
     defineFun
       s
       (isFProduction f)
-      (prodToPairs ++ prodFromPairs)
+      (prodFromPairs ++ prodToPairs)
       SMT.tBool
       (eqToFunRet /\ (domain $$ unwrap prodFrom) /\ allInDomain)
   -- forM [0 .. maxArity - 1] $ \argNum -> do

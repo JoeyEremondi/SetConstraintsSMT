@@ -25,9 +25,8 @@ main = do
         CAnd
           [ ((Var "N") `sup` ((FunApp zero [])))
           , ((Var "N") `sup` ((FunApp ssucc [Var "N"])))
-          -- , ((Var "L") `eq`
-          --    ((FunApp listNull []) `Union` ((FunApp ccons [Var "N", Var "L"]))))
-          --, 
+          , ((Var "L") `eq`
+             ((FunApp listNull []) `Union` ((FunApp ccons [Var "N", Var "L"]))))
           ]
   l <-
     SMT.newLogger $

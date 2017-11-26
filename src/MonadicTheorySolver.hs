@@ -113,34 +113,92 @@ enumerateDomain s numPreds bvType = do
         SMT.Unsat -> return accum
         _ -> error "TODO Failed quant enumerating domain"
 
+--To enumerate through our productions
 enumerateProductions ::
-     SMT.Solver -> BitVector -> [SExpr] -> (VecFun, Int) -> IO [[BitVector]]
-enumerateProductions s fromSymbol bvType (f, arity) = do
-  SMT.simpleCommand s ["push"]
-  forM allArgNums $ \argNum -> declareVec s (argName argNum) bvType
-  SMT.assert s $
-    (isFProduction f) $$ (unwrap fromSymbol ++ concatMap unwrap allArgs)
-  ret <- helper []
-  SMT.simpleCommand s ["pop"]
-  return $ ret
+     SMT.Solver
+  -> [SExpr]
+  -> [(VecFun, Int)]
+  -> IO [(BitVector, VecFun, [BitVector])]
+enumerateProductions s bvType funPairs
+  -- SMT.assert s $
+  --   (isFProduction f) $$ (unwrap fromSymbol ++ concatMap unwrap allArgs)
+ = do
+  let initialMap = Map.fromList [(f, Set.empty) | (f, _) <- funPairs]
+  helper Set.empty initialMap
   where
-    numPreds = length bvType
-    allArgNums = [0 .. arity - 1]
-    argName i = "prod-val-" ++ show i
-    allArgs = map productionVal allArgNums
     productionVal i = nameToBits (length bvType) $ argName i
-    helper accum = do
-      result <- SMT.check s
-      case result of
-        SMT.Sat -> do
-          args <- forM allArgs $ \arg -> getBitVec s arg
-          let neqConds =
-                (flip map) (zip allArgNums args) $ \(i, arg) ->
-                  SMT.not (arg `vecEq` (productionVal i))
-          SMT.assert s $ orAll neqConds
-          helper (args : accum)
-        SMT.Unsat -> return accum
-        _ -> error "TODO Failed quant"
+    helper ::
+         Set.Set BitVector
+      -> Map.Map VecFun (Set.Set [BitVector])
+      -> IO [(BitVector, VecFun, [BitVector])]
+    helper foundVals foundProds
+      --Declare n variables that we've found
+      --Assert that, for some function, we've found its arguments
+      --but we haven't found the production of our declared values yet for some function
+     = do
+      (fResults) <-
+        forM funPairs $ \(f, arity) ->
+          if arity <= length foundVals
+            then do
+              SMT.simpleCommand s ["push"]
+              let allArgNums = [0 .. arity - 1]
+                  allArgNames = map argName allArgNums
+            --Declare arguments for the function
+              forM allArgNames $ \theArg -> declareVec s theArg bvType
+              let allArgs = map productionVal allArgNums
+              let isFound arg =
+                    orAll $ Set.toList $ Set.map (vecEq arg) $ foundVals
+              let prodEq p1 p2 = andAll $ zipWith vecEq p1 p2
+              let prodIsFound prod =
+                    orAll $
+                    Set.toList $ Set.map (prodEq prod) $ foundProds Map.! f
+              --Assert that we've found all the arguments
+              forM allArgs $ \arg -> SMT.assert s $ isFound arg
+              --Get expression for the function result
+              let fx = bvApply numPreds f allArgs
+              let prod = fx : allArgs
+              --Assert that we have a production (i.e. everything is in the domain)
+              SMT.assert s $ (isFProduction f) $$ (concat $ map unwrap prod)
+              --Assert that we haven't found this production
+              SMT.assert s $ SMT.not (prodIsFound prod)
+              --Look for a solution
+              satResult <- SMT.check s
+              finalResult <-
+                case satResult of
+                  SMT.Unsat -> return Nothing
+                  SMT.Sat -> do
+                    prodV <- forM prod $ \bv -> getBitVec s bv
+                    return $ Just (f, prodV)
+                  _ -> error "Quantification failed in production enum"
+              SMT.simpleCommand s ["pop"]
+              return $ finalResult
+            else return Nothing
+      case Maybe.catMaybes fResults of
+        [] -> do
+          return $
+            concatMap
+              (\(f, prods) -> [(from, f, to) | (from:to) <- Set.toList prods]) $
+            Map.toList foundProds --We found nothing new
+        newProds -> do
+          let updateMap (f, prod) dict =
+                Map.insert f (Set.insert prod (dict Map.! f)) dict
+          helper
+            (foundVals `Set.union` (Set.fromList $ map (head . snd) newProds))
+            (foldr updateMap foundProds newProds)
+    numPreds = length bvType
+    argName i = "prod-val-" ++ show i
+    -- helper2 accum = do
+    --   result <- SMT.check s
+    --   case result of
+    --     SMT.Sat -> do
+    --       args <- forM allArgs $ \arg -> getBitVec s arg
+    --       let neqConds =
+    --             (flip map) (zip allArgNums args) $ \(i, arg) ->
+    --               SMT.not (arg `vecEq` (productionVal i))
+    --       SMT.assert s $ orAll neqConds
+    --       helper2 (args : accum)
+    --     SMT.Unsat -> return accum
+    --     _ -> error "TODO Failed quant"
 
 varProductions :: SMT.Solver -> Expr -> Integer -> Int -> IO [BitVector]
 varProductions s v i n = do
@@ -312,10 +370,9 @@ printAndReturnResult s numPreds bvType state funPairs allFreeVars
  = do
   domain <- enumerateDomain s numPreds bvType
   putStrLn $ "DOMAIN: " ++ show domain
-  forM domain $ \d ->
-    forM funPairs $ \funPair@(f, arity) -> do
-      prodsFrom <- enumerateProductions s d bvType funPair
-      forM prodsFrom $ \p -> putStrLn $ show d ++ "  ->  " ++ show f ++ show p
+  prodsFrom <- enumerateProductions s bvType funPairs
+  forM prodsFrom $ \(from, f, to) ->
+    putStrLn $ show (from) ++ "  ->  " ++ show f ++ show to
   forM allFreeVars $ \v -> do
     prods <- varProductions s v ((predNums state) Map.! v) numPreds
     forM prods $ \prod -> putStrLn $ varName v ++ "  ->  " ++ (show prod)

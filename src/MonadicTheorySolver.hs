@@ -111,7 +111,7 @@ enumerateDomain s numPreds bvType = do
           SMT.assert s (SMT.not (domainVal `vecEq` valueExpr))
           helper (valueExpr : accum)
         SMT.Unsat -> return accum
-        _ -> error "TODO Failed quant enumerating domain"
+        e -> error $ "TODO Failed quant enumerating domain" ++ show e
 
 --To enumerate through our productions
 enumerateProductions ::
@@ -169,7 +169,9 @@ enumerateProductions s bvType funPairs
                   SMT.Sat -> do
                     prodV <- forM prod $ \bv -> getBitVec s bv
                     return $ Just (f, prodV)
-                  _ -> error "Quantification failed in production enum"
+                  e ->
+                    error $
+                    "Quantification failed in production enum " ++ show e
               SMT.simpleCommand s ["pop"]
               return $ finalResult
             else return Nothing
@@ -220,7 +222,7 @@ varProductions s v i n = do
           SMT.assert s (SMT.not (prod `vecEq` matchingVal))
           helper (prod : accum)
         SMT.Unsat -> return accum
-        _ -> error "TODO Failed quant"
+        e -> error $ "TODO Failed quant " ++ show e
 
 declareOrDefineFuns ::
      Integral t
@@ -247,9 +249,11 @@ declareOrDefineFuns s numPreds bvType state subExprs = do
             i = bitFor e
     --Define the ith-bit functions for our constructor when we can
     --Otherwise, just declare them
-    forM (reverse subExprs) $ \expr -> do
+    forM (reverse subExprs) $ \expr
+      --TODO put back define case?
+     -> do
       case expr of
-        Var v -> do
+        _ -> do
           declareFun s (funFor expr) (concat $ replicate arity bvType) SMT.tBool
           return ()
         _ -> do
@@ -310,6 +314,7 @@ makePred s clist
   --setOptions s
  = do
   let subExprs = constrSubExprs clist
+      (posList, negList) = List.partition isPos clist
       numPreds = length subExprs
       theMaxArity = maxArity subExprs
       numForall = 2 + theMaxArity
@@ -324,7 +329,8 @@ makePred s clist
       boolDomArg = nameToBits numPreds boolDomArgName
   let comp = do
         boolDomPredList <- forM subExprs (booleanDomainClause boolDomArg)
-        constrPreds <- forM clist (constrClause boolDomArg)
+        posConstrPreds <- forM posList (posConstrClause boolDomArg)
+        negConstrPreds <- forM negList (negConstrClause numPreds)
         funDomPreds <-
           withNForalls vars (toInteger $ length subExprs) $ \vars -> do
             predClauses <- forM subExprs functionDomainClause
@@ -333,8 +339,11 @@ makePred s clist
             let singleFunClause = andAll funClauses
             -- enumClauses <- enumeratedDomainClauses funPairs
             return $ (isValidDomain ==> (andAll predClauses)) /\ singleFunClause
-        return (funDomPreds, andAll $ boolDomPredList ++ constrPreds)
-  let ((funDomPreds, boolDomPreds), state) = runState comp state0
+        return
+          ( funDomPreds
+          , andAll $ boolDomPredList ++ posConstrPreds
+          , negConstrPreds)
+  let ((funDomPreds, boolDomPreds, negPreds), state) = runState comp state0
   --Declare our domain function and its subfunctions
   declareDomain s numPreds bvType boolDomPreds boolDomArgName
   --Declare or define the functions for each constructor in our Herbrand universe
@@ -345,7 +354,9 @@ makePred s clist
   forM (existentialVars state) $ \v -> do
     declareVec s v bvType
     --Assert that each existential variable is in our domain
-    SMT.assert s $ domain $$ [SMT.Atom v]
+    SMT.assert s $ domain $$ (unwrap $ nameToBits numPreds v)
+  --Assert the properties of each existential variable
+  forM negPreds $ SMT.assert s
   --Assert our domain properties
   SMT.assert s funDomPreds
   result <- SMT.check s

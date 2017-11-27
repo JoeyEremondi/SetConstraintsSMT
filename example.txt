@@ -1,0 +1,38 @@
+cons :: b < (Null U Cons(T,T)) => A -> B -> Cons(A,B)
+
+head :: Forall 
+head (Cons x y) = x
+
+duplicate : A -> RET 
+duplicate Null = Null
+duplicate Cons a b = Cons a (Cons a (duplicate a b))
+
+Null /\ A /< {} => C1 == Null
+Null /\ A = {} => C1 == {}
+Cons(T,T) /\ a /< {} => C2 = Cons(A, Cons(A, R))  
+Cons(T,T) /\ a == {} => C2 = {}
+R = C1 \/ C2
+
+case (duplicate x) of
+  Null => head x
+  Cons(_, _) => head x
+
+x :: X 
+duplicate x :: D
+
+First check: 
+D < Cons(T,T)
+X /< Cons(T,T)
+Null /\ X /< {} => C1 == Null
+Null /\ X = {} => C1 == {}
+Cons(T,T) /\ X /< {} => C2 = Cons(A, Cons(A, D))  
+Cons(T,T) /\ X == {} => C2 = {}
+D = C1 \/ C2
+
+D < Null
+X /< Cons(T,T)
+Null /\ X /< {} => C1 == Null
+Null /\ X = {} => C1 == {}
+Cons(T,T) /\ X /< {} => C2 = Cons(A, Cons(A, D))  
+Cons(T,T) /\ X == {} => C2 = {}
+D = C1 \/ C2

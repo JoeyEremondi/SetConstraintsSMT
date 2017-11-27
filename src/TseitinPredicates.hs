@@ -109,13 +109,15 @@ booleanDomainClause x e = do
       return $ SMT.not px
     _ -> return $ SMT.bool True
 
-constrClause :: BitVector -> Constr -> ConfigM SMT.SExpr
-constrClause x (e1 `Sub` e2) = do
+posConstrClause :: BitVector -> Constr -> ConfigM SMT.SExpr
+posConstrClause x (e1 `Sub` e2) = do
   pe1 <- p e1 x
   pe2 <- p e2 x
   return $ pe1 ==> pe2
-constrClause _ (e1 `NotSub` e2) = do
-  x <- fresh
+
+negConstrClause :: Integral i => i -> Constr -> ConfigM SMT.SExpr
+negConstrClause numPreds (e1 `NotSub` e2) = do
+  x <- fresh numPreds
   pe1 <- p e1 x
   pe2 <- p e2 x
   return $ pe1 /\ (SMT.not pe2)
@@ -136,8 +138,8 @@ initialState vars exprs =
   , existentialVars = []
   }
 
-fresh :: ConfigM BitVector
-fresh = do
+fresh :: Integral i => i -> ConfigM BitVector
+fresh numPreds = do
   state <- get
   n <- getNumPreds
   let oldVars = existentialVars state
@@ -147,4 +149,4 @@ fresh = do
       newVar = head validVars
       newState = state {existentialVars = newVar : oldVars}
   put newState
-  return $ BitVector [SMT.Atom (newVar ++ show i) | i <- [0 .. n - 1]]
+  return $ nameToBits numPreds newVar

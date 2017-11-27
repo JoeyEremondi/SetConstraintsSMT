@@ -45,6 +45,10 @@ data Constr
            Expr
   deriving (Eq, Ord, Show, Read)
 
+isPos :: Constr -> Bool
+isPos (Sub _ _) = True
+isPos (NotSub _ _) = False
+
 -- pattern Sup :: Expr -> Expr -> Constr
 -- pattern Sup x y = Sub y x
 subExpressions :: Expr -> [Expr]
@@ -125,6 +129,7 @@ literalsInCExpr (CSubset e1 e2) = Set.singleton (e1, e2)
 literalsInCExpr (CNot c) = literalsInCExpr c
 literalsInCExpr (CAnd cexprs) = Set.unions $ map literalsInCExpr cexprs
 literalsInCExpr (COr cexprs) = Set.unions $ map literalsInCExpr cexprs
+literalsInCExpr (CImplies c1 c2) = Set.unions $ map literalsInCExpr [c1, c2]
 literalsInCExpr (CXor cexprs) = Set.unions $ map literalsInCExpr cexprs
 literalsInCExpr (CIff c1 c2) =
   (literalsInCExpr c1) `Set.union` literalsInCExpr c2

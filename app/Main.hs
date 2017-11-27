@@ -22,7 +22,7 @@ _C1 = Var "C1"
 
 _C2 = Var "C2"
 
-_Y = Var "Y"
+_Y = FunApp (VecFun "Const") []
 
 main :: IO ()
 main = do
@@ -41,6 +41,7 @@ main = do
   let goodCheck =
         CAnd
           [ _D `sub` _Cons Top Top
+          , _X `sub` ((_Cons Top Top) `Union` _Null)
           , _X `notsub` _Cons Top Top
           , ((_Null `Intersect` _X) `notsub` Bottom) `CImplies` (_C1 `eq` _Null)
           , ((_Null `Intersect` _X) `eq` Bottom) `CImplies` (_C1 `eq` Bottom)

@@ -86,7 +86,7 @@ solveSetConstraints s c
                 True -> return $ lhs `Sub` rhs
                 False -> return $ lhs `NotSub` rhs
           SMT.simpleCommand s ["push"]
-          putStrLn $ "Outer loop trying: " ++ show litAssigns
+          --putStrLn $ "Outer loop trying: " ++ show litAssigns
           result <- Solver.makePred s litAssigns --TODO make better name
           SMT.simpleCommand s ["pop"]
           case result of

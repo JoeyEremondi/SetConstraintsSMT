@@ -27,7 +27,7 @@ funDomain = Fun "functionDomain"
 -- type SBVec = SMT.BitVec
 data PredNumConfig = Config
   { predNums :: Map.Map Expr Integer
-  , arities :: Map.Map VecFun Int
+  , funVals :: Map.Map String VecFun
   , universalVars :: [BitVector]
   , existentialVars :: [String]
   }
@@ -37,8 +37,8 @@ getNumPreds = (Map.size . predNums) <$> get
 
 type ConfigM = State PredNumConfig
 
-arity :: VecFun -> ConfigM Int
-arity f = ((Map.! f) . arities) <$> get
+getAllFunctions :: ConfigM [VecFun]
+getAllFunctions = (Map.elems . funVals) <$> get
 
 p :: Expr -> BitVector -> ConfigM SMT.SExpr
 p e x = do
@@ -59,14 +59,17 @@ forallVars n = (take n . universalVars) <$> get
 
 differentFuns :: VecFun -> ConfigM [(VecFun, Int)]
 differentFuns f = do
-  arMap <- arities <$> get
-  return $ filter (\(g, _) -> g /= f) $ Map.toList arMap
+  funMap <- funVals <$> get
+  return [(g, arity g) | g <- Map.elems funMap, vecFunName g /= vecFunName f]
+
+funNamed = error "TODO funNamed"
 
 functionDomainClause :: Expr -> ConfigM SMT.SExpr
 functionDomainClause e = do
   n <- getNumPreds
   case e of
-    FunApp f args -> do
+    FunApp fname args -> do
+      f <- funNamed fname
       xs <- forallVars (length args)
       let fxs = bvApply n f xs
       lhs <- p e fxs
@@ -123,17 +126,17 @@ negConstrClause numPreds (e1 `NotSub` e2) = do
   return $ pe1 /\ (SMT.not pe2)
 
 --Assert that the given function is closed over the domain
-funClause :: (VecFun, Int) -> ConfigM SMT.SExpr
-funClause (f, arity) = do
+funClause :: VecFun -> ConfigM SMT.SExpr
+funClause f = do
   n <- getNumPreds
-  xs <- forallVars arity
+  xs <- forallVars $ arity f
   let fxs = bvApply n f xs
-  return $ domain $$ (unwrap fxs)
+  return $ domain $$$ [fxs]
 
 initialState vars exprs =
   Config
   { predNums = allExprNums exprs
-  , arities = getArities exprs
+  , funVals = error "TODO funVals"
   , universalVars = vars
   , existentialVars = []
   }

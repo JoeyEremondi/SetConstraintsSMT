@@ -12,6 +12,17 @@ import Data.Char (digitToInt)
 import qualified Data.List as List
 import qualified SimpleSMT as SMT
 
+data VecFun = VecFun
+  { vecFunName :: String
+  , argUsedBits :: [[Int]]
+  } deriving (Eq, Ord, Read)
+
+instance Show VecFun where
+  show = vecFunName
+
+arity :: VecFun -> Int
+arity = length . argUsedBits
+
 defineFun s (Fun f) = SMT.defineFun s f
 
 declareFun s (Fun f) = SMT.declareFun s f
@@ -29,7 +40,7 @@ newtype Fun = Fun
   } deriving (Eq, Ord, Show, Read)
 
 newtype BitVector_ a = BitVector
-  { unwrap :: [a]
+  { bitList :: [a]
   } deriving (Functor, Traversable, Foldable, Eq, Ord)
 
 type BitVector = BitVector_ SMT.SExpr
@@ -54,16 +65,20 @@ nameToBitNames nintegral s = [(s ++ "-" ++ show i) | i <- [0 .. n - 1]]
   where
     n = fromIntegral nintegral
 
-funToBitFuns n (VecFun f) = map Fun $ nameToBitNames n f
+funToBitFuns n f = map Fun $ nameToBitNames n (vecFunName f)
 
 ($$) :: Fun -> [SMT.SExpr] -> SMT.SExpr
 (Fun f) $$ [] = (SMT.Atom f)
 (Fun f) $$ args = SMT.List (SMT.Atom f : args)
 
+($$$) :: Fun -> [BitVector] -> SMT.SExpr
+(Fun f) $$$ [] = (SMT.Atom f)
+(Fun f) $$$ args = SMT.List (SMT.Atom f : concatMap bitList args)
+
 --map SMT.List $ List.transpose ((unwrap $ nameToBits n vf) : map unwrap args)
 bvApply :: Integral i => i -> VecFun -> [BitVector] -> BitVector
 bvApply n vf args =
-  BitVector $ bvApplyHelper (funToBitFuns n vf) (map unwrap args)
+  BitVector $ bvApplyHelper (funToBitFuns n vf) (map bitList args)
 
 -- bvMap :: Integral i => i -> Fun -> [BitVector] -> [SMT.SExpr]
 -- bvMap n f args = bvApplyHelper (replicate (fromIntegral n) f) (map unwrap args)
@@ -120,10 +135,13 @@ boolToBit :: Int -> SMT.SExpr -> Integer -> SMT.SExpr
 boolToBit n b shift =
   (SMT.ite b (SMT.bvShl (SMT.bvBin n 1) (SMT.bvBin n shift)) (SMT.bvBin n 0))
 
+declareVec :: SMT.Solver -> [Char] -> [SMT.SExpr] -> IO [SMT.SExpr]
 declareVec s fullName types =
   forM (zip (nameToBitNames (length types) fullName) types) $ \(nm, t) ->
     SMT.declare s nm t
 
+declareFunVec ::
+     SMT.Solver -> [Char] -> [SMT.SExpr] -> [SMT.SExpr] -> IO [SMT.SExpr]
 declareFunVec s fullName argTypes retTypes =
   forM (zip (nameToBitNames (length retTypes) fullName) retTypes) $ \(nm, rtype) ->
     SMT.declareFun s nm argTypes rtype

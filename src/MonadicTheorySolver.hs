@@ -45,36 +45,31 @@ makeBvType n = replicate (fromInteger $ toInteger n) SMT.tBool
 --             ((isFProduction f) $$
 --              (x : [productionFor i $$ [x] | i <- [0 .. arity - 1]]))
 --   return (orAll hasProdConds)
-isFProduction (VecFun f) = Fun ("isProductionFor-" ++ f)
+isFProduction f = Fun ("isProductionFor-" ++ vecFunName f)
 
 --productionFor i = "productionFor" ++ show i
 declareProdFuncions ::
-     Integral i => SMT.Solver -> i -> [SExpr] -> [(VecFun, Int)] -> Int -> IO ()
-declareProdFuncions s numPreds bvType funPairs maxArity = do
-  forM funPairs $ \(f, arity) -> do
+     Integral i => SMT.Solver -> i -> [SExpr] -> [VecFun] -> Int -> IO ()
+declareProdFuncions s numPreds bvType funs maxArity = do
+  forM funs $ \f -> do
     let prodFromName = "fromSymb"
     let prodFrom = nameToBits numPreds prodFromName
     let prodToNames =
           map
             (\i -> nameToBitNames numPreds $ "toSymb" ++ show i)
-            [0 .. arity - 1]
+            [0 .. (arity f) - 1]
     let prodTos :: [BitVector] = map (BitVector . (map SMT.Atom)) prodToNames
     let prodFromPairs = zip (nameToBitNames numPreds prodFromName) bvType
     let prodToPairs = zip (concat prodToNames) (repeat SMT.tBool)
-    let fTos =
-          BitVector
-            [ bitf $$ (concat $ map unwrap $ prodTos)
-            | bitf <- funToBitFuns numPreds f
-            ]
+    let fTos = BitVector [bitf $$$ prodTos | bitf <- funToBitFuns numPreds f]
     let eqToFunRet = vecEq prodFrom fTos
-    let (allInDomain :: SExpr) =
-          andAll $ map (\v -> domain $$ (unwrap v)) prodTos
+    let (allInDomain :: SExpr) = andAll $ map (\v -> domain $$$ [v]) prodTos
     defineFun
       s
       (isFProduction f)
       (prodFromPairs ++ prodToPairs)
       SMT.tBool
-      (eqToFunRet /\ (domain $$ unwrap prodFrom) /\ allInDomain)
+      (eqToFunRet /\ (domain $$$ [prodFrom]) /\ allInDomain)
   -- forM [0 .. maxArity - 1] $ \argNum -> do
   --   SMT.declareFun s (productionFor argNum) [bvType] bvType
   return ()
@@ -85,19 +80,19 @@ withNForalls vars numBits comp = do
   result <- comp vars
   return $ SMT.List $ [SMT.Atom "forall", SMT.List (varTypes), result]
   where
-    varTypes = [SMT.List [bit, SMT.tBool] | bv <- vars, bit <- unwrap bv]
+    varTypes = [SMT.List [bit, SMT.tBool] | bv <- vars, bit <- bitList bv]
 
 validDomain :: ConfigM SExpr
 validDomain = do
   vars <- universalVars <$> get
-  let varResults = (flip map) vars (\x -> domain $$ (unwrap x))
+  let varResults = (flip map) vars (\x -> domain $$$ [])
   return $ andAll varResults
 
 enumerateDomain :: Integral i => SMT.Solver -> i -> [SExpr] -> IO [BitVector]
 enumerateDomain s numPreds bvType = do
   SMT.simpleCommand s ["push"]
   declareVec s ("domain-val") bvType
-  SMT.assert s $ domain $$ (unwrap domainVal)
+  SMT.assert s $ domain $$$ [domainVal]
   ret <- helper []
   SMT.simpleCommand s ["pop"]
   return ret
@@ -115,15 +110,12 @@ enumerateDomain s numPreds bvType = do
 
 --To enumerate through our productions
 enumerateProductions ::
-     SMT.Solver
-  -> [SExpr]
-  -> [(VecFun, Int)]
-  -> IO [(BitVector, VecFun, [BitVector])]
-enumerateProductions s bvType funPairs
+     SMT.Solver -> [SExpr] -> [VecFun] -> IO [(BitVector, VecFun, [BitVector])]
+enumerateProductions s bvType funs
   -- SMT.assert s $
   --   (isFProduction f) $$ (unwrap fromSymbol ++ concatMap unwrap allArgs)
  = do
-  let initialMap = Map.fromList [(f, Set.empty) | (f, _) <- funPairs]
+  let initialMap = Map.fromList [(f, Set.empty) | f <- funs]
   helper Set.empty initialMap
   where
     productionVal i = nameToBits (length bvType) $ argName i
@@ -137,11 +129,11 @@ enumerateProductions s bvType funPairs
       --but we haven't found the production of our declared values yet for some function
      = do
       (fResults) <-
-        forM funPairs $ \(f, arity) ->
-          if arity <= length foundVals
+        forM funs $ \f ->
+          if (arity f) <= length foundVals
             then do
               SMT.simpleCommand s ["push"]
-              let allArgNums = [0 .. arity - 1]
+              let allArgNums = [0 .. (arity f) - 1]
                   allArgNames = map argName allArgNums
             --Declare arguments for the function
               forM allArgNames $ \theArg -> declareVec s theArg bvType
@@ -158,7 +150,7 @@ enumerateProductions s bvType funPairs
               let fx = bvApply numPreds f allArgs
               let prod = fx : allArgs
               --Assert that we have a production (i.e. everything is in the domain)
-              SMT.assert s $ (isFProduction f) $$ (concat $ map unwrap prod)
+              SMT.assert s $ (isFProduction f) $$$ prod
               --Assert that we haven't found this production
               SMT.assert s $ SMT.not (prodIsFound prod)
               --Look for a solution
@@ -206,7 +198,7 @@ varProductions :: SMT.Solver -> Expr -> Integer -> Int -> IO [BitVector]
 varProductions s v i n = do
   SMT.simpleCommand s ["push"]
   declareVec s vname $ makeBvType n
-  SMT.assert s $ domain $$ (unwrap matchingVal)
+  SMT.assert s $ domain $$$ [matchingVal]
   SMT.assert s $ ithBit i matchingVal n
   ret <- helper []
   SMT.simpleCommand s ["pop"]
@@ -233,13 +225,12 @@ declareOrDefineFuns ::
   -> [Expr]
   -> IO [[()]]
 declareOrDefineFuns s numPreds bvType state subExprs = do
-  let funPairs = Map.toList $ arities state
-  forM funPairs $ \(f, arity) -> do
-    let allArgNums = [0 .. arity - 1]
+  let funs = Map.elems $ funVals state
+  forM funs $ \f -> do
+    let allArgNums = [0 .. (arity f) - 1]
     let allArgNames = map (\arg -> ("f-arg-" ++ show arg)) allArgNums
     let allArgs =
           map (\arg -> nameToBits numPreds $ ("f-arg-" ++ show arg)) allArgNums
-    let allArgsConcat = concatMap unwrap allArgs
     let funBitNames = funToBitFuns numPreds f
     let bitFor expr = (predNums state) Map.! expr
     let funFor e =
@@ -254,26 +245,28 @@ declareOrDefineFuns s numPreds bvType state subExprs = do
      -> do
       case expr of
         _ -> do
-          declareFun s (funFor expr) (concat $ replicate arity bvType) SMT.tBool
+          declareFun
+            s
+            (funFor expr)
+            (concat $ replicate (arity f) bvType)
+            SMT.tBool
           return ()
         _ -> do
           let funBody =
                 case expr of
                   e1 `Union` e2 ->
-                    ((funFor e1) $$ allArgsConcat) \/
-                    ((funFor e2) $$ allArgsConcat)
+                    ((funFor e1) $$$ allArgs) \/ ((funFor e2) $$$ allArgs)
                   e1 `Intersect` e2 ->
-                    ((funFor e1) $$ allArgsConcat) /\
-                    ((funFor e2) $$ allArgsConcat)
-                  Neg e1 -> SMT.not ((funFor e1) $$ allArgsConcat)
+                    ((funFor e1) $$$ allArgs) /\ ((funFor e2) $$$ allArgs)
+                  Neg e1 -> SMT.not ((funFor e1) $$$ allArgs)
                   FunApp g gargs
-                    | f == g ->
+                    | vecFunName f == g ->
                       andAll $
                       (flip map)
                         (zip gargs allArgs)
                         (\(setArg, inputArg) ->
                            ithBit (bitFor setArg) inputArg numPreds)
-                    | f /= g -> SMT.bool False
+                    | vecFunName f /= g -> SMT.bool False
                   Top -> SMT.bool True
                   Bottom -> SMT.bool False
           let argPairs =
@@ -306,7 +299,7 @@ declareDomain s numPreds bvType boolDomPreds boolDomArgName
     domain
     (zip (nameToBitNames numPreds domainArgName) bvType)
     SMT.tBool $
-    (booleanDomain $$ unwrap domainArg) /\ (funDomain $$ unwrap domainArg)
+    (booleanDomain $$$ [domainArg]) /\ (funDomain $$$ [domainArg])
 
 --TODO include constratailint stuff
 makePred :: SMT.Solver -> [Constr] -> IO (Either [Constr] TreeGrammar) --TODO return solution
@@ -323,7 +316,7 @@ makePred s clist
       vars =
         map (\i -> nameToBits numPreds $ "y_univ_" ++ show i) [1 .. numForall]
       state0 = (initialState vars subExprs)
-      funPairs = (Map.toList . arities) state0
+      funs :: [VecFun] = Map.elems $ funVals state0
       allFreeVars :: [Expr] = filter isVar subExprs
       boolDomArgName = "z_boolDomain"
       boolDomArg = nameToBits numPreds boolDomArgName
@@ -335,7 +328,7 @@ makePred s clist
           withNForalls vars (toInteger $ length subExprs) $ \vars -> do
             predClauses <- forM subExprs functionDomainClause
             isValidDomain <- validDomain
-            funClauses <- forM funPairs funClause
+            funClauses <- forM funs funClause
             let singleFunClause = andAll funClauses
             -- enumClauses <- enumeratedDomainClauses funPairs
             return $ (isValidDomain ==> (andAll predClauses)) /\ singleFunClause
@@ -349,12 +342,12 @@ makePred s clist
   --Declare or define the functions for each constructor in our Herbrand universe
   declareOrDefineFuns s numPreds bvType state subExprs
   --Declare functions that determines if a production is valid
-  declareProdFuncions s numPreds bvType funPairs theMaxArity
+  declareProdFuncions s numPreds bvType funs theMaxArity
   --Declare our existential variables
   forM (existentialVars state) $ \v -> do
     declareVec s v bvType
     --Assert that each existential variable is in our domain
-    SMT.assert s $ domain $$ (unwrap $ nameToBits numPreds v)
+    SMT.assert s $ domain $$$ [nameToBits numPreds v]
   --Assert the properties of each existential variable
   forM negPreds $ SMT.assert s
   --Assert our domain properties
@@ -363,7 +356,7 @@ makePred s clist
   --TODO minimize?
   case result of
     SMT.Sat -> do
-      printAndReturnResult s numPreds bvType state funPairs allFreeVars
+      printAndReturnResult s numPreds bvType state funs allFreeVars
     SMT.Unsat -> do
       return $ Left clist --TODO niminize lemma
     SMT.Unknown -> error "Failed to solve quanitification"
@@ -373,15 +366,15 @@ printAndReturnResult ::
   -> Int
   -> [SExpr]
   -> PredNumConfig
-  -> [(VecFun, Int)]
+  -> [VecFun]
   -> [Expr]
   -> IO (Either a b)
-printAndReturnResult s numPreds bvType state funPairs allFreeVars
+printAndReturnResult s numPreds bvType state funs allFreeVars
   -- SMT.command s $ SMT.List [SMT.Atom "get-model"]
  = do
   domain <- enumerateDomain s numPreds bvType
   putStrLn $ "DOMAIN: " ++ show domain
-  prodsFrom <- enumerateProductions s bvType funPairs
+  prodsFrom <- enumerateProductions s bvType funs
   forM prodsFrom $ \(from, f, to) ->
     putStrLn $ show (from) ++ "  ->  " ++ show f ++ show to
   forM allFreeVars $ \v -> do

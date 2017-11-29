@@ -6,13 +6,13 @@ import System.Environment
 
 import SolveSetConstraints
 
-zero = VecFun "zero"
+zero = "zero"
 
-ssucc = VecFun "succ"
+ssucc = "succ"
 
-_Null = FunApp (VecFun "Null") []
+_Null = FunApp ("Null") []
 
-_Cons h t = FunApp (VecFun "Cons") [h, t]
+_Cons h t = FunApp ("Cons") [h, t]
 
 _X = Var "X"
 
@@ -22,7 +22,7 @@ _C1 = Var "C1"
 
 _C2 = Var "C2"
 
-_Y = FunApp (VecFun "Const") []
+_Y = FunApp ("Const") []
 
 main :: IO ()
 main = do
@@ -70,7 +70,7 @@ main = do
   s1 <- makeSolver args
   s2 <- makeSolver args
   solveSetConstraints s1 goodCheck
-  solveSetConstraints s2 badCheck
+  -- solveSetConstraints s2 badCheck
   -- putStrLn $ show result
 
 makeSolver args = do

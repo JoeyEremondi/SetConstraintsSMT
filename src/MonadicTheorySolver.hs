@@ -85,7 +85,7 @@ withNForalls vars numBits comp = do
 validDomain :: ConfigM SExpr
 validDomain = do
   vars <- universalVars <$> get
-  let varResults = (flip map) vars (\x -> domain $$$ [])
+  let varResults = (flip map) vars (\x -> domain $$$ [x])
   return $ andAll varResults
 
 enumerateDomain :: Integral i => SMT.Solver -> i -> [SExpr] -> IO [BitVector]

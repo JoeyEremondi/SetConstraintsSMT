@@ -27,13 +27,13 @@ _Y = FunApp ("Const") []
 main :: IO ()
 main = do
   args <- getArgs
-  -- let cset =
-  --       CAnd
-  --         [ ((Var "N") `sup` ((FunApp zero [])))
-  --         , ((Var "N") `sup` ((FunApp ssucc [Var "N"])))
-  --         , ((Var "L") `eq`
-  --            ((FunApp listNull []) `Union` ((FunApp ccons [Var "N", Var "L"]))))
-  --         ]
+  let cset =
+        CAnd
+          [ ((Var "N") `sup` ((FunApp zero [])))
+          , ((Var "N") `sup` ((FunApp ssucc [Var "N"])))
+          -- , ((Var "L") `eq`
+          --    ((FunApp listNull []) `Union` ((FunApp ccons [Var "N", Var "L"]))))
+          ]
   let goodCheck =
         CAnd
           [ _D `sub` _Cons Top Top
@@ -69,6 +69,7 @@ main = do
           ]
   s1 <- makeSolver args
   s2 <- makeSolver args
+  -- solveSetConstraints s1 cset
   solveSetConstraints s1 goodCheck
   -- solveSetConstraints s2 badCheck
   -- putStrLn $ show result

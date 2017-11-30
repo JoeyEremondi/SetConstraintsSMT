@@ -17,6 +17,8 @@ import qualified Data.Maybe as Maybe
 import Data.Char (isAlphaNum)
 import qualified Data.Set as Set
 
+import qualified Data.Graph as Graph
+
 --listInDomain n l = andAll $ map (\i -> "domain" $$ [nthElem l i]) [0 .. n - 1]
 data Expr
   = Var String
@@ -42,18 +44,19 @@ isPos :: Constr -> Bool
 isPos (Sub _ _) = True
 isPos (NotSub _ _) = False
 
--- pattern Sup :: Expr -> Expr -> Constr
--- pattern Sup x y = Sub y x
-subExpressions :: Expr -> [Expr]
-subExpressions e = e : concatMap subExpressions (children e)
-  where
-    children (Var v) = []
-    children (Union x y) = [x, y]
-    children (Intersect x y) = [x, y]
-    children (Neg x) = [x]
-    children (FunApp f es) = es
-    children Top = []
-    children Bottom = []
+--Edges in our expression dependency graph
+exprDepEdges :: Expr -> [(Expr, [Expr])]
+exprDepEdges e = (e, children e) : concatMap exprDepEdges (children e)
+
+--Find the direct children of the given expression's AST root
+children :: Expr -> [Expr]
+children (Var v) = []
+children (Union x y) = [x, y]
+children (Intersect x y) = [x, y]
+children (Neg x) = [x]
+children (FunApp f es) = es
+children Top = []
+children Bottom = []
 
 isVar (Var v) = True
 isVar _ = False
@@ -63,12 +66,34 @@ varName (Var v) = v
 
 type SubExprs = [Expr]
 
-constrSubExprs :: [Constr] -> SubExprs
-constrSubExprs clist = List.nub subExprs
+constrDepEdges :: [Constr] -> ([Expr], [(Expr, [Expr])])
+constrDepEdges clist = (allExprs, mergedPairs)
   where
     sides (Sub x y) = [x, y]
     sides (NotSub x y) = [x, y]
-    subExprs = [esub | c <- clist, e <- sides c, esub <- subExpressions e]
+    rawPairs = [edge | c <- clist, e <- sides c, edge <- exprDepEdges e]
+    allExprs = List.nub $ map fst rawPairs
+    mergedPairs =
+      List.nub
+        [ ( expr
+          , List.nub
+              [ subExpr
+              | (expr', subExprs) <- rawPairs
+              , expr' == expr
+              , subExpr <- subExprs
+              ])
+        | (expr) <- allExprs
+        ]
+
+orderedSubExpressions :: [Constr] -> [Expr]
+orderedSubExpressions clist =
+  map ((\(x, _, _) -> x) . unVertex) $ reverse $ Graph.topSort g
+  where
+    (allExprs, pairs) = constrDepEdges clist
+    rawExprNums = Map.fromList $ zip allExprs [0 ..]
+    exprNum = (rawExprNums Map.!)
+    edges = map (\(e, es) -> (e, exprNum e, map exprNum es)) pairs
+    (g, unVertex, unKey) = Graph.graphFromEdges edges
 
 allExprNums :: SubExprs -> Map.Map Expr Integer
 allExprNums elist = Map.fromList $ zip elist [0 ..]

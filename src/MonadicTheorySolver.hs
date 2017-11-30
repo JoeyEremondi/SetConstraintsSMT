@@ -240,18 +240,20 @@ declareOrDefineFuns s numPreds bvType state subExprs = do
             i = bitFor e
     --Define the ith-bit functions for our constructor when we can
     --Otherwise, just declare them
-    forM (reverse subExprs) $ \expr
+    forM subExprs $ \expr
       --TODO put back define case?
      -> do
       case expr of
-        _ -> do
+        Var _ -> do
           declareFun
             s
             (funFor expr)
             (concat $ replicate (arity f) bvType)
             SMT.tBool
           return ()
-        _ -> do
+        _
+          -- putStrLn $ "** Defining function for " ++ show expr
+         -> do
           let funBody =
                 case expr of
                   e1 `Union` e2 ->
@@ -306,7 +308,7 @@ makePred :: SMT.Solver -> [Constr] -> IO (Either [Constr] TreeGrammar) --TODO re
 makePred s clist
   --setOptions s
  = do
-  let subExprs = constrSubExprs clist
+  let subExprs = orderedSubExpressions clist
       (posList, negList) = List.partition isPos clist
       numPreds = length subExprs
       theMaxArity = maxArity subExprs
@@ -325,13 +327,16 @@ makePred s clist
         posConstrPreds <- forM posList (posConstrClause boolDomArg)
         negConstrPreds <- forM negList (negConstrClause numPreds)
         funDomPreds <-
-          withNForalls vars (toInteger $ length subExprs) $ \vars -> do
+          withNForalls vars (toInteger $ length subExprs) $ \vars
+            --TODO only do clauses for undefined function vars
+           -> do
             predClauses <- forM subExprs functionDomainClause
             isValidDomain <- validDomain
             funClauses <- forM funs funClause
             let singleFunClause = andAll funClauses
-            -- enumClauses <- enumeratedDomainClauses funPairs
+            -- return $ isValidDomain ==> singleFunClause
             return $ (isValidDomain ==> (andAll predClauses)) /\ singleFunClause
+            -- enumClauses <- enumeratedDomainClauses funPairs
         return
           ( funDomPreds
           , andAll $ boolDomPredList ++ posConstrPreds
@@ -375,6 +380,7 @@ printAndReturnResult s numPreds bvType state funs allFreeVars
   domain <- enumerateDomain s numPreds bvType
   putStrLn $ "DOMAIN: " ++ show domain
   prodsFrom <- enumerateProductions s bvType funs
+  --TODO do based on options
   forM prodsFrom $ \(from, f, to) ->
     putStrLn $ show (from) ++ "  ->  " ++ show f ++ show to
   forM allFreeVars $ \v -> do

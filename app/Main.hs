@@ -70,8 +70,8 @@ main = do
   s1 <- makeSolver args
   s2 <- makeSolver args
   -- solveSetConstraints s1 cset
-  solveSetConstraints s1 goodCheck
-  -- solveSetConstraints s2 badCheck
+  -- solveSetConstraints s1 goodCheck
+  solveSetConstraints s2 badCheck
   -- putStrLn $ show result
 
 makeSolver args = do

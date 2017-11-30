@@ -315,7 +315,7 @@ makePred s clist
       bvType = makeBvType numPreds
       vars =
         map (\i -> nameToBits numPreds $ "y_univ_" ++ show i) [1 .. numForall]
-      state0 = (initialState vars subExprs)
+      state0 = (initialState numPreds vars subExprs)
       funs :: [VecFun] = Map.elems $ funVals state0
       allFreeVars :: [Expr] = filter isVar subExprs
       boolDomArgName = "z_boolDomain"

@@ -62,7 +62,10 @@ differentFuns f = do
   funMap <- funVals <$> get
   return [(g, arity g) | g <- Map.elems funMap, vecFunName g /= vecFunName f]
 
-funNamed = error "TODO funNamed"
+funNamed :: String -> ConfigM VecFun
+funNamed f = do
+  funs <- funVals <$> get
+  return $ funs Map.! f
 
 functionDomainClause :: Expr -> ConfigM SMT.SExpr
 functionDomainClause e = do
@@ -133,10 +136,14 @@ funClause f = do
   let fxs = bvApply n f xs
   return $ domain $$$ [fxs]
 
-initialState vars exprs =
+initialState numBits vars exprs =
   Config
   { predNums = allExprNums exprs
-  , funVals = error "TODO funVals"
+  , funVals =
+      Map.fromList
+        [ (f, VecFun f (replicate ar [0 .. numBits - 1]))
+        | (f, ar) <- Map.toList $ getArities exprs
+        ]
   , universalVars = vars
   , existentialVars = []
   }

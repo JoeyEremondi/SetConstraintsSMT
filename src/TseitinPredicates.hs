@@ -96,7 +96,7 @@ booleanDomainClause x e = do
     Neg e2 -> do
       pe <- p e x
       pe2 <- p e2 x
-      return $ pe === (SMT.bvNot pe2)
+      return $ pe === (SMT.not pe2)
     Union a b -> do
       pe <- p e x
       pa <- p a x

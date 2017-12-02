@@ -85,15 +85,21 @@ constrDepEdges clist = (allExprs, mergedPairs)
         | (expr) <- allExprs
         ]
 
+isCycle (Graph.CyclicSCC _) = True
+isCycle _ = False
+
 orderedSubExpressions :: [Constr] -> [Expr]
 orderedSubExpressions clist =
-  map ((\(x, _, _) -> x) . unVertex) $ reverse $ Graph.topSort g
+  if (length topologicalOrder == length allExprs)
+    then map ((\(x, _, _) -> x) . unVertex) $ reverse $ topologicalOrder
+    else error "Graph is not acyclic"
   where
     (allExprs, pairs) = constrDepEdges clist
     rawExprNums = Map.fromList $ zip allExprs [0 ..]
     exprNum = (rawExprNums Map.!)
     edges = map (\(e, es) -> (e, exprNum e, map exprNum es)) pairs
     (g, unVertex, unKey) = Graph.graphFromEdges edges
+    topologicalOrder = Graph.topSort g
 
 allExprNums :: SubExprs -> Map.Map Expr Integer
 allExprNums elist = Map.fromList $ zip elist [0 ..]
@@ -128,6 +134,7 @@ data CExpr
              CExpr
   | CIff CExpr
          CExpr
+  deriving (Eq, Ord, Show, Read)
 
 x `sub` y = CSubset x y
 

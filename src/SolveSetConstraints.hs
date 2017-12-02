@@ -41,8 +41,8 @@ intToBits n i = BitVector $ map bitToSexp paddedBinaryString
     bitToSexp '0' = SMT.bool False
     bitToSexp '1' = SMT.bool True
 
-solveSetConstraints :: SMT.Solver -> CExpr -> IO ()
-solveSetConstraints s c
+solveSetConstraints :: SMT.Solver -> (Expr, CExpr) -> IO ()
+solveSetConstraints s (nonEmptyExpr, cInitial)
   --Declare our inclusion function
   --
  = do
@@ -53,6 +53,8 @@ solveSetConstraints s c
   SMT.assert s $ formulaForCExpr exprFun c
   solverLoop
   where
+    nonEmptyConstr = CNot (CSubset nonEmptyExpr Bottom)
+    c = (CAnd [cInitial, nonEmptyConstr])
     lits = literalsInCExpr c
     toFloat = (fromIntegral :: Int -> Float)
     numBits = ceiling $ logBase 2 (toFloat $ Set.size lits)
@@ -82,7 +84,7 @@ solveSetConstraints s c
                 False -> return $ lhs `NotSub` rhs
           SMT.simpleCommand s ["push"]
           --putStrLn $ "Outer loop trying: " ++ show litAssigns
-          result <- Solver.makePred s litAssigns --TODO make better name
+          result <- Solver.makePred s (nonEmptyExpr, litAssigns) --TODO make better name
           SMT.simpleCommand s ["pop"]
           case result of
             Left lemma -> do

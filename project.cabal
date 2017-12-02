@@ -15,11 +15,12 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Syntax, SMTHelpers, TseitinPredicates, MonadicTheorySolver, SolveSetConstraints, TreeGrammar
+  exposed-modules:     Syntax, SMTHelpers, TseitinPredicates, MonadicTheorySolver, SolveSetConstraints, TreeGrammar, ArgParse
   build-depends:       base >= 4.7 && < 5,
                        simple-smt >= 0.7.1,
                        mtl == 2.2.1,
-                       containers == 0.5.7.1
+                       containers == 0.5.7.1,
+                       optparse-applicative >= 0.13.0.0
   default-language:    Haskell2010
 
 executable project-exe
@@ -29,6 +30,7 @@ executable project-exe
   build-depends:       base
                      , project
                      , simple-smt >= 0.7.1
+                     , optparse-applicative >= 0.13.0.0
   default-language:    Haskell2010
 
 test-suite project-test

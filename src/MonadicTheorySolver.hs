@@ -304,11 +304,12 @@ declareDomain s numPreds bvType boolDomPreds boolDomArgName
     (booleanDomain $$$ [domainArg]) /\ (funDomain $$$ [domainArg])
 
 --TODO include constratailint stuff
-makePred :: SMT.Solver -> [Constr] -> IO (Either [Constr] TreeGrammar) --TODO return solution
-makePred s clist
+makePred :: SMT.Solver -> (Expr, [Constr]) -> IO (Either [Constr] TreeGrammar) --TODO return solution
+makePred s (nonEmpty, initialCList)
   --setOptions s
  = do
-  let subExprs = orderedSubExpressions clist
+  let clist = (nonEmpty `NotSub` Bottom) : initialCList
+      subExprs = orderedSubExpressions clist
       (posList, negList) = List.partition isPos clist
       numPreds = length subExprs
       theMaxArity = maxArity subExprs

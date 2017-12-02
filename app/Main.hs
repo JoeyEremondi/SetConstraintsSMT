@@ -69,7 +69,7 @@ main = do
   s <- makeSolver options
   -- solveSetConstraints s1 cset
   -- solveSetConstraints s1 goodCheck
-  solveSetConstraints s inConstrs
+  solveSetConstraints s options inConstrs
   -- putStrLn $ show result
 
 makeSolver opts = do

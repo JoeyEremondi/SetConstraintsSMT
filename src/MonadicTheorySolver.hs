@@ -27,6 +27,8 @@ import TreeGrammar
 import Data.Char (isAlphaNum)
 import qualified Data.Set as Set
 
+import ArgParse
+
 makeBvType :: Integral a => a -> [SMT.SExpr]
 makeBvType n = replicate (fromInteger $ toInteger n) SMT.tBool
 
@@ -304,8 +306,12 @@ declareDomain s numPreds bvType boolDomPreds boolDomArgName
     (booleanDomain $$$ [domainArg]) /\ (funDomain $$$ [domainArg])
 
 --TODO include constratailint stuff
-makePred :: SMT.Solver -> (Expr, [Constr]) -> IO (Either [Constr] TreeGrammar) --TODO return solution
-makePred s (nonEmpty, initialCList)
+makePred ::
+     SMT.Solver
+  -> Options
+  -> (Expr, [Constr])
+  -> IO (Either [Constr] TreeGrammar) --TODO return solution
+makePred s options (nonEmpty, initialCList)
   --setOptions s
  = do
   let clist = (nonEmpty `NotSub` Bottom) : initialCList
@@ -362,29 +368,34 @@ makePred s (nonEmpty, initialCList)
   --TODO minimize?
   case result of
     SMT.Sat -> do
-      printAndReturnResult s numPreds bvType state funs allFreeVars
+      printAndReturnResult s options numPreds bvType state funs allFreeVars
     SMT.Unsat -> do
       return $ Left clist --TODO niminize lemma
     SMT.Unknown -> error "Failed to solve quanitification"
 
 printAndReturnResult ::
      SMT.Solver
+  -> Options
   -> Int
   -> [SExpr]
   -> PredNumConfig
   -> [VecFun]
   -> [Expr]
   -> IO (Either a b)
-printAndReturnResult s numPreds bvType state funs allFreeVars
+printAndReturnResult s options numPreds bvType state funs allFreeVars
   -- SMT.command s $ SMT.List [SMT.Atom "get-model"]
  = do
-  domain <- enumerateDomain s numPreds bvType
-  putStrLn $ "DOMAIN: " ++ show domain
-  prodsFrom <- enumerateProductions s bvType funs
-  --TODO do based on options
-  forM prodsFrom $ \(from, f, to) ->
-    putStrLn $ show (from) ++ "  ->  " ++ show f ++ show to
-  forM allFreeVars $ \v -> do
-    prods <- varProductions s v ((predNums state) Map.! v) numPreds
-    forM prods $ \prod -> putStrLn $ varName v ++ "  ->  " ++ (show prod)
+  case (getModel options) of
+    True -> do
+      domain <- enumerateDomain s numPreds bvType
+      putStrLn $ "DOMAIN: " ++ show domain
+      prodsFrom <- enumerateProductions s bvType funs
+        --TODO do based on options
+      forM prodsFrom $ \(from, f, to) ->
+        putStrLn $ show (from) ++ "  ->  " ++ show f ++ show to
+      forM allFreeVars $ \v -> do
+        prods <- varProductions s v ((predNums state) Map.! v) numPreds
+        forM prods $ \prod -> putStrLn $ varName v ++ "  ->  " ++ (show prod)
+      return ()
+    False -> return ()
   return $ Right $ error "TODO " --() --TODO return solution

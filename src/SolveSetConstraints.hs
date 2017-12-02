@@ -1,5 +1,6 @@
 module SolveSetConstraints where
 
+import ArgParse
 import Control.Monad
 import Data.Char (intToDigit)
 import qualified Data.List as List
@@ -42,8 +43,8 @@ intToBits n i = BitVector $ map bitToSexp paddedBinaryString
     bitToSexp '0' = SMT.bool False
     bitToSexp '1' = SMT.bool True
 
-solveSetConstraints :: SMT.Solver -> (Expr, CExpr) -> IO ()
-solveSetConstraints s (nonEmptyExpr, cInitial)
+solveSetConstraints :: SMT.Solver -> Options -> (Expr, CExpr) -> IO ()
+solveSetConstraints s options (nonEmptyExpr, cInitial)
   --Declare our inclusion function
   --
  = do
@@ -90,7 +91,7 @@ solveSetConstraints s (nonEmptyExpr, cInitial)
                 False -> return $ lhs `NotSub` rhs
           SMT.simpleCommand s ["push"]
           --putStrLn $ "Outer loop trying: " ++ show litAssigns
-          result <- Solver.makePred s (nonEmptyExpr, litAssigns) --TODO make better name
+          result <- Solver.makePred s options (nonEmptyExpr, litAssigns) --TODO make better name
           SMT.simpleCommand s ["pop"]
           case result of
             Left lemma -> do

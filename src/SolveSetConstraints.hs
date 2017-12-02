@@ -2,6 +2,7 @@ module SolveSetConstraints where
 
 import Control.Monad
 import Data.Char (intToDigit)
+import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified MonadicTheorySolver as Solver
@@ -51,8 +52,12 @@ solveSetConstraints s (nonEmptyExpr, cInitial)
   SMT.declareFun s "subsetof" (litType ++ litType) SMT.tBool
   --Assert the SMT version of our expression
   SMT.assert s $ formulaForCExpr exprFun c
-  solverLoop
+  forM [(e1, e2) | e1 <- exprList, e2 <- exprList] $
+    uncurry assertSubsetProperty
+  assertTransitive
+  solverLoop 0
   where
+    exprSubset lhs rhs = (Fun "subsetof") $$$ [exprFun lhs, exprFun rhs]
     nonEmptyConstr = CNot (CSubset nonEmptyExpr Bottom)
     c = (CAnd [cInitial, nonEmptyConstr])
     lits = literalsInCExpr c
@@ -60,12 +65,13 @@ solveSetConstraints s (nonEmptyExpr, cInitial)
     numBits = ceiling $ logBase 2 (toFloat $ Set.size lits)
     litType = replicate numBits SMT.tBool
     exprs = exprsInCExpr c
+    exprList = Set.toList exprs
     exprMap = Map.fromList $ zip (Set.toList exprs) [0 ..]
     exprFun = (intToBits numBits) . (exprMap Map.!)
-    solverLoop = do
+    solverLoop i = do
       result <- SMT.check s
       case result of
-        SMT.Unsat -> putStrLn "UNSATISFIABLE"
+        SMT.Unsat -> putStrLn $ "UNSAT in " ++ show i ++ " theory iterations"
         SMT.Unknown -> error "Shouldn't have quantifiers in solver loop"
         SMT.Sat -> do
           model <- SMT.command s $ SMT.List [SMT.Atom "get-model"]
@@ -89,7 +95,42 @@ solveSetConstraints s (nonEmptyExpr, cInitial)
           case result of
             Left lemma -> do
               SMT.assert s $ makeLemma exprFun lemma
-              solverLoop
-            Right _ -> putStrLn "SAT"
+              solverLoop (i + 1)
+            Right _ ->
+              putStrLn $ "SAT in " ++ show (i + 1) ++ " theory iterations"
           return ()
       return ()
+    assertTransitive =
+      forM
+        [ (e1, e2, e3)
+        | e1 <- exprList
+        , e2 <- exprList
+        , e3 <- exprList
+        , length (List.nub [e1, e2, e3]) == 3
+        ] $ \(e1, e2, e3) -> do
+        SMT.assert s $
+          ((exprSubset e1 e2) /\ (exprSubset e2 e3)) ==> (exprSubset e1 e3)
+    assertSubsetProperty :: Expr -> Expr -> IO ()
+    --Bottom subset of everything
+    assertSubsetProperty Bottom rhs = SMT.assert s $ exprSubset Bottom rhs
+    --Top superset of everything
+    assertSubsetProperty lhs Top = SMT.assert s $ exprSubset lhs Top
+    --Assume our lattice is not degenerate
+    assertSubsetProperty Top Bottom =
+      SMT.assert s $ SMT.not $ exprSubset Top Bottom
+    --Everything a subset of itself
+    assertSubsetProperty lhs rhs
+      | lhs == rhs = SMT.assert s $ exprSubset lhs rhs
+    -- A subset of A U B
+    assertSubsetProperty lhs rhs@(Union e1 e2)
+      | lhs `List.elem` [e1, e2] = SMT.assert s $ exprSubset lhs rhs
+      -- A /\ B subset of A
+    assertSubsetProperty lhs@(Intersect e1 e2) rhs
+      | lhs `List.elem` [e1, e2] = SMT.assert s $ exprSubset lhs rhs
+    --Constant symbols are never in the empty set
+    assertSubsetProperty lhs@(FunApp f []) Bottom =
+      SMT.assert s $ SMT.not $ exprSubset lhs Bottom
+    --Disjoint symbols are never subsets of each otheppr
+    assertSubsetProperty lhs@(FunApp f _) rhs@(FunApp g _)
+      | f /= g = SMT.assert s $ SMT.not $ exprSubset lhs rhs
+    assertSubsetProperty _ _ = return ()

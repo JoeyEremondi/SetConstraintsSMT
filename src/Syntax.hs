@@ -148,6 +148,28 @@ x `eq` y = CAnd [x `sub` y, y `sub` x]
 
 x `neq` y = COr [x `notsub` y, y `notsub` x]
 
+data Projection = Projection
+  { projFun :: String
+  , projArgNum :: Int
+  , projOf :: Expr
+  }
+
+withProjection :: String -> Int -> Projection -> (Expr -> CExpr) -> CExpr
+withProjection freshName arity proj f =
+  let args =
+        map (\i -> Var $ freshName ++ "_projarg" ++ show i) [0 .. arity - 1]
+      projVar = args List.!! (projArgNum proj)
+      result = f projVar
+      --Assert that our expression is equal to the function applied to some fresh variables
+      projConstr = (FunApp (projFun proj) args) `eq` (projOf proj)
+      --Assert that the variable arguments are empty iff the RHS is empty
+      --This is necessary, since F(X1...Xk) is empty if any Xi is empty
+      projEqConstrs =
+        map
+          (\arg -> (CSubset arg Bottom) `CIff` (CSubset (projOf proj) Bottom))
+          args
+  in CAnd $ [result, projConstr] ++ projEqConstrs
+
 --Get the literals in a constraint expression
 literalsInCExpr :: CExpr -> Set.Set (Expr, Expr)
 literalsInCExpr (CSubset e1 e2) = Set.singleton (e1, e2)

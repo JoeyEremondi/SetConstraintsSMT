@@ -3,6 +3,9 @@ module Andersen where
 import Control.Applicative ((<|>), many)
 import Control.Monad (forM, void)
 import Data.Char (isDigit, isLetter)
+import qualified Data.List as List
+import qualified Data.Map as Map
+import Syntax
 import Text.Parsec (ParseError, oneOf, parse, sepBy, try)
 import Text.Parsec.Char (char, digit, letter, string)
 import Text.Parsec.Combinator (many1, notFollowedBy)
@@ -22,9 +25,24 @@ data AExpr
   | AVar String
   | Zero
   | One
-  | FunApp String
-           [AExpr]
+  | AFunApp String
+            [AExpr]
   deriving (Eq, Ord, Show)
+
+projections :: AExpr -> [AExpr]
+projections (AUnion e1 e2) = projections e1 ++ projections e2
+projections (AInter e1 e2) = projections e1 ++ projections e2
+projections (AFunApp _ args) = concatMap projections args
+projections e1@(AProj _ _ e2) = e1 : (projections e2)
+projections _ = []
+
+findArities :: AExpr -> [(String, Int)]
+findArities (AUnion e1 e2) = findArities e1 ++ findArities e2
+findArities (AInter e1 e2) = findArities e1 ++ findArities e2
+findArities (AFunApp fstr args) =
+  (fstr, length args) : concatMap findArities args
+findArities e1@(AProj _ _ e2) = (findArities e2)
+findArities _ = []
 
 type AConstr = (AExpr, AExpr)
 
@@ -63,7 +81,7 @@ funApp = do
   void $ char '('
   args <- expr `sepBy` (char ',')
   void $ char ')'
-  return $ FunApp fun args
+  return $ AFunApp fun args
 
 var :: Parser AExpr
 var = AVar <$> identifier
@@ -89,6 +107,36 @@ constr = do
   void $ string "<="
   e2 <- expr
   return (e1, e2)
+
+toCExpr :: [AConstr] -> CExpr
+toCExpr constrs = CAnd $ map (singleToCExpr arityMap) constrs
+  where
+    arityMap =
+      Map.fromList $
+      concatMap findArities [e | (e1, e2) <- constrs, e <- [e1, e2]]
+
+singleToCExpr :: Map.Map String Int -> AConstr -> CExpr
+singleToCExpr arityMap (e1, e2) = helper allProjs Map.empty
+  where
+    allProjs = List.nub $ concatMap projections [e1, e2]
+    helper [] projMap = CSubset (toSetExpr projMap e1) (toSetExpr projMap e2)
+    helper (proj@(AProj funName argNum expr):rest) projMap =
+      withProjection
+        "__freshVarName" --TODO make this unique
+        (arityMap Map.! funName)
+        (Projection funName argNum (toSetExpr projMap expr))
+        (\projExp -> helper rest $ Map.insert proj projExp projMap)
+    toSetExpr projMap e =
+      case e of
+        AUnion e1 e2 -> (self e1) `Union` (self e2)
+        AInter e1 e2 -> (self e1) `Intersect` (self e2)
+        Zero -> Bottom
+        One -> Top
+        AVar s -> Var s
+        AFunApp nm exprs -> FunApp nm $ map self exprs
+        e@(AProj _ _ _) -> projMap Map.! e
+      where
+        self = toSetExpr projMap
 
 parseConstr :: String -> Either ParseError AConstr
 parseConstr = parse constr ""

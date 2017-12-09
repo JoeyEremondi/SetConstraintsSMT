@@ -117,6 +117,7 @@ enumerateProductions s bvType funs
   -- SMT.assert s $
   --   (isFProduction f) $$ (unwrap fromSymbol ++ concatMap unwrap allArgs)
  = do
+  putStrLn $ "In Theory Solver with" ++ show numPreds ++ " predicates"
   let initialMap = Map.fromList [(f, Set.empty) | f <- funs]
   helper Set.empty initialMap
   where

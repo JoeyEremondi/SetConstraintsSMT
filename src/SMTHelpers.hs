@@ -147,3 +147,8 @@ declareFunVec s fullName argTypes retTypes =
     SMT.declareFun s nm argTypes rtype
 
 defineFunVec = error "TODO"
+
+forAll :: [(SMT.SExpr, SMT.SExpr)] -> SMT.SExpr -> SMT.SExpr
+forAll typePairs body = SMT.List [SMT.Atom "forall", types, body]
+  where
+    types = SMT.List $ map (\(x, y) -> SMT.List [x, y]) typePairs

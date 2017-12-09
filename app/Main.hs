@@ -2,6 +2,7 @@
 
 module Main where
 
+import Andersen
 import qualified SimpleSMT as SMT
 import Syntax
 import System.Environment
@@ -65,7 +66,10 @@ main = do
     -- Cons(T,T) /\ X == {} => C2 = {}
     -- D = C1 \/ C2
   inConstrsString <- readFile (inFile options)
-  let (inConstrs :: (Expr, CExpr)) = read inConstrsString
+  let (inConstrs :: (Expr, CExpr)) =
+        case parseBanshee options of
+          False -> read inConstrsString
+          True -> (Var "XDummy", parseBansheeString inConstrsString)
   s <- makeSolver options
   -- solveSetConstraints s1 cset
   -- solveSetConstraints s1 goodCheck

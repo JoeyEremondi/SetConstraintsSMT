@@ -170,9 +170,17 @@ withProjection freshName arity proj f =
           args
   in CAnd $ [result, projConstr] ++ projEqConstrs
 
+newtype Literal =
+  Literal (Expr, Expr)
+  deriving (Eq, Ord, Show)
+
+litLhs (Literal (e, _)) = e
+
+litRhs (Literal (_, e)) = e
+
 --Get the literals in a constraint expression
-literalsInCExpr :: CExpr -> Set.Set (Expr, Expr)
-literalsInCExpr (CSubset e1 e2) = Set.singleton (e1, e2)
+literalsInCExpr :: CExpr -> Set.Set Literal
+literalsInCExpr (CSubset e1 e2) = Set.singleton $ Literal (e1, e2)
 literalsInCExpr (CNot c) = literalsInCExpr c
 literalsInCExpr (CAnd cexprs) = Set.unions $ map literalsInCExpr cexprs
 literalsInCExpr (COr cexprs) = Set.unions $ map literalsInCExpr cexprs

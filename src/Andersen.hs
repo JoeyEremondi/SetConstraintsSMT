@@ -1,8 +1,11 @@
-module Andersen where
+module Andersen
+  ( parseBansheeString
+  ) where
 
 import Control.Applicative ((<|>), many)
 import Control.Monad (forM, void)
 import Data.Char (isDigit, isLetter)
+import Data.Either (rights)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import Syntax
@@ -107,6 +110,9 @@ constr = do
   void $ string "<="
   e2 <- expr
   return (e1, e2)
+
+parseBansheeString :: String -> CExpr
+parseBansheeString input = toCExpr $ rights $ map parseConstr $ lines input
 
 toCExpr :: [AConstr] -> CExpr
 toCExpr constrs = CAnd $ map (singleToCExpr arityMap) constrs

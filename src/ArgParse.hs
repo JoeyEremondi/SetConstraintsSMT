@@ -9,6 +9,7 @@ data Options = Options
   , solver :: String
   , example :: Bool
   , getModel :: Bool
+  , parseBanshee :: Bool
   }
 
 sample :: Parser Options
@@ -22,4 +23,8 @@ sample =
     (long "example" <> short 'e' <> help "Print an example satisfiable member") <*>
   switch
     (long "getModel" <> short 'm' <>
-     help "Get the tree grammars for each variable")
+     help "Get the tree grammars for each variable") <*>
+  switch
+    (long "banshee" <> short 'b' <>
+     help
+       "Parse the given input file as output from Banshee's Andersen analysis")

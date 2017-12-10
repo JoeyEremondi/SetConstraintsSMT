@@ -55,7 +55,7 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   SMT.assert s $ formulaForCExpr litFun c
   putStrLn "Starting to assert subset properties"
   -- forM [(e1, e2) | e1 <- exprList, e2 <- exprList] $
-  --   uncurry assertSubsetProperty
+  --   uncurry subsetLemmaFor
   putStrLn "Done asserting subset properties"
   -- assertTransitive
   putStrLn "Done asserting transitivity"
@@ -63,16 +63,44 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
     -- exprSubset lhs rhs = (Fun "literalValue") $$$ [exprFun lhs, exprFun rhs]
   where
     nonEmptyConstr = CNot (CSubset nonEmptyExpr Bottom)
-    c = (CAnd [cInitial, nonEmptyConstr])
+    cBase = (CAnd [cInitial, nonEmptyConstr])
+    cStructural =
+      CAnd $
+      concatMap
+        (uncurry subsetLemmaFor)
+        [(e1, e2) | e1 <- Set.toList baseExprs, e2 <- Set.toList baseExprs]
+    cInter = CAnd [cBase, cStructural] --This should have all the literals we need
+    cTransitive =
+      CAnd
+        [ transConstr e1 e2 e3
+        | Literal (e1, e2) <- Set.toList lits
+        , Just e3list <- [Map.lookup e2 litRightSidesMap]
+        , e3 <- e3list
+        , Map.member (Literal (e1, e3)) litMap
+        ]
+      where
+        transConstr e1 e2 e3 =
+          (CAnd [CSubset e1 e2, CSubset e2 e3]) `CImplies` (CSubset e1 e3)
+    c = CAnd [cInter, cTransitive] --TODO add more
     literalNames =
       map (\i -> SMT.Atom $ "literal_" ++ show i) [0 .. length lits - 1]
-    lits = literalsInCExpr c
+    baseLits = literalsInCExpr cBase
+    lits = literalsInCExpr cInter
     litMap = Map.fromList $ flip zip literalNames $ Set.toList lits
-    litFun = (litMap Map.!)
+    litFun l =
+      case (Map.lookup l litMap) of
+        Nothing -> error ("Key" ++ show l ++ " not in map " ++ show litMap)
+        Just x -> x
+    litRightSidesMap =
+      Map.fromList
+        [ (e1, [e2 | Literal (e1', e2) <- Set.toList lits, e1' == e1])
+        | Literal (e1, _) <- Set.toList lits
+        ]
     toFloat = (fromIntegral :: Int -> Float)
     numBits = ceiling $ logBase 2 (toFloat $ Set.size lits)
     litType = replicate numBits SMT.tBool
-    exprs = exprsInCExpr c
+    baseExprs = exprsInCExpr cBase
+    exprs = exprsInCExpr cInter
     -- exprList = Set.toList exprs
     -- exprMap = Map.fromList $ zip (Set.toList exprs) [0 ..]
     -- exprFun = (intToBits numBits) . (exprMap Map.!)
@@ -86,7 +114,10 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
           putStrLn "Solver loop SAT, trying theory solver"
           model <- SMT.command s $ SMT.List [SMT.Atom "get-model"]
           litAssigns <-
-            forM (Set.toList lits) $ \lit@(Literal (lhs, rhs)) -> do
+            forM (Set.toList baseLits) $ \lit@(Literal (lhs, rhs))
+              --Only need our base literals, since all others are implied
+              --They speed up SAT but slow down theory solver
+             -> do
               result <- SMT.getExpr s $ litFun lit
               let resultBool =
                     case result of
@@ -133,27 +164,26 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
     --     ] $ \(e1, e2, e3) -> do
     --     SMT.assert s $
     --       ((exprSubset e1 e2) /\ (exprSubset e2 e3)) ==> (exprSubset e1 e3)
-    -- assertSubsetProperty :: Expr -> Expr -> IO ()
-    -- --Bottom subset of everything
-    -- assertSubsetProperty Bottom rhs = SMT.assert s $ exprSubset Bottom rhs
-    -- --Top superset of everything
-    -- assertSubsetProperty lhs Top = SMT.assert s $ exprSubset lhs Top
-    -- --Assume our lattice is not degenerate
-    -- assertSubsetProperty Top Bottom =
-    --   SMT.assert s $ SMT.not $ exprSubset Top Bottom
-    -- --Everything a subset of itself
-    -- assertSubsetProperty lhs rhs
-    --   | lhs == rhs = SMT.assert s $ exprSubset lhs rhs
-    -- -- A subset of A U B
-    -- assertSubsetProperty lhs rhs@(Union e1 e2)
-    --   | lhs `List.elem` [e1, e2] = SMT.assert s $ exprSubset lhs rhs
-    --   -- A /\ B subset of A
-    -- assertSubsetProperty lhs@(Intersect e1 e2) rhs
-    --   | lhs `List.elem` [e1, e2] = SMT.assert s $ exprSubset lhs rhs
-    -- --Constant symbols are never in the empty set
-    -- assertSubsetProperty lhs@(FunApp f []) Bottom =
-    --   SMT.assert s $ SMT.not $ exprSubset lhs Bottom
-    -- --Disjoint symbols are never subsets of each otheppr
-    -- assertSubsetProperty lhs@(FunApp f _) rhs@(FunApp g _)
-    --   | f /= g = SMT.assert s $ SMT.not $ exprSubset lhs rhs
-    -- assertSubsetProperty _ _ = return ()
+    --Lemmas that always hold, no matter what literals we deal with
+    subsetLemmaFor :: Expr -> Expr -> [CExpr]
+    --Bottom subset of everything
+    subsetLemmaFor Bottom rhs = [Bottom `sub` rhs]
+    --Top superset of everything
+    subsetLemmaFor lhs Top = [lhs `sub` Top]
+    --Assume our lattice is not degenerate
+    subsetLemmaFor Top Bottom = [CNot $ Top `sub` Bottom]
+    --Everything a subset of itself
+    subsetLemmaFor lhs rhs
+      | lhs == rhs = [lhs `sub` rhs]
+    -- A subset of A U B
+    subsetLemmaFor lhs rhs@(Union e1 e2)
+      | lhs `List.elem` [e1, e2] = [lhs `sub` rhs]
+      -- A /\ B subset of A
+    subsetLemmaFor lhs@(Intersect e1 e2) rhs
+      | lhs `List.elem` [e1, e2] = [lhs `sub` rhs]
+    --Constant symbols are never in the empty set
+    subsetLemmaFor lhs@(FunApp f []) Bottom = [CNot $ lhs `sub` Bottom]
+    --Disjoint symbols are never subsets of each otheppr
+    subsetLemmaFor lhs@(FunApp f _) rhs@(FunApp g _)
+      | f /= g = [CNot $ lhs `sub` rhs]
+    subsetLemmaFor _ _ = []

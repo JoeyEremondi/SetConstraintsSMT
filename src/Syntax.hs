@@ -48,6 +48,10 @@ isPos (NotSub _ _) = False
 exprDepEdges :: Expr -> [(Expr, [Expr])]
 exprDepEdges e = (e, children e) : concatMap exprDepEdges (children e)
 
+subExprEdges :: Expr -> [(Expr, Expr)]
+subExprEdges e =
+  [(e, x) | x <- children e] ++ concatMap subExprEdges (children e)
+
 --Find the direct children of the given expression's AST root
 children :: Expr -> [Expr]
 children (Var v) = []
@@ -170,9 +174,9 @@ withProjection freshName arity proj f =
           args
   in CAnd $ [result, projConstr] ++ projEqConstrs
 
-newtype Literal =
-  Literal (Expr, Expr)
-  deriving (Eq, Ord, Show)
+newtype Literal = Literal
+  { unLiteral :: (Expr, Expr)
+  } deriving (Eq, Ord, Show)
 
 litLhs (Literal (e, _)) = e
 

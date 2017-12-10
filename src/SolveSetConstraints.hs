@@ -12,6 +12,10 @@ import SMTHelpers
 import qualified SimpleSMT as SMT
 import Syntax
 
+import Data.Graph
+import Data.Tree (flatten)
+import Data.Tuple (swap)
+
 formulaForCExpr :: (Literal -> SMT.SExpr) -> CExpr -> SMT.SExpr
 formulaForCExpr litNum cexp =
   case cexp of
@@ -53,7 +57,10 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   forM literalNames $ \(SMT.Atom ln) -> SMT.declare s ln SMT.tBool
   --Assert the SMT version of our expression
   SMT.assert s $ formulaForCExpr litFun c
-  putStrLn "Starting to assert subset properties"
+  putStrLn $
+    "Done asserting formula, " ++ show (Set.size baseLits) ++ " base literals"
+  putStrLn $
+    "Partitioned into " ++ show (length litPartitions) ++ " subproblems"
   -- forM [(e1, e2) | e1 <- exprList, e2 <- exprList] $
   --   uncurry subsetLemmaFor
   putStrLn "Done asserting subset properties"
@@ -68,12 +75,12 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
       CAnd $
       concatMap
         (uncurry subsetLemmaFor)
-        [(e1, e2) | e1 <- Set.toList baseExprs, e2 <- Set.toList baseExprs]
+        [(e1, e2) | e1 <- baseExprList, e2 <- baseExprList]
     cInter = CAnd [cBase, cStructural] --This should have all the literals we need
     cTransitive =
       CAnd
         [ transConstr e1 e2 e3
-        | Literal (e1, e2) <- Set.toList lits
+        | Literal (e1, e2) <- litList
         , Just e3list <- [Map.lookup e2 litRightSidesMap]
         , e3 <- e3list
         , Map.member (Literal (e1, e3)) litMap
@@ -86,23 +93,26 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
       map (\i -> SMT.Atom $ "literal_" ++ show i) [0 .. length lits - 1]
     baseLits = literalsInCExpr cBase
     lits = literalsInCExpr cInter
-    litMap = Map.fromList $ flip zip literalNames $ Set.toList lits
+    litList = Set.toList lits
+    litMap = Map.fromList $ flip zip literalNames $ litList
     litFun l =
       case (Map.lookup l litMap) of
         Nothing -> error ("Key" ++ show l ++ " not in map " ++ show litMap)
         Just x -> x
     litRightSidesMap =
       Map.fromList
-        [ (e1, [e2 | Literal (e1', e2) <- Set.toList lits, e1' == e1])
-        | Literal (e1, _) <- Set.toList lits
+        [ (e1, [e2 | Literal (e1', e2) <- litList, e1' == e1])
+        | Literal (e1, _) <- litList
         ]
+    litPartitions = partitionLiterals lits
     toFloat = (fromIntegral :: Int -> Float)
     numBits = ceiling $ logBase 2 (toFloat $ Set.size lits)
     litType = replicate numBits SMT.tBool
     baseExprs = exprsInCExpr cBase
+    baseExprList = Set.toList baseExprs
     exprs = exprsInCExpr cInter
-    -- exprList = Set.toList exprs
-    -- exprMap = Map.fromList $ zip (Set.toList exprs) [0 ..]
+    exprList = Set.toList exprs
+    -- exprMap = Map.fromList $ zip (exprList) [0 ..]
     -- exprFun = (intToBits numBits) . (exprMap Map.!)
     solverLoop i = do
       putStrLn $ "SolverLoop" ++ show i
@@ -113,32 +123,33 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
         SMT.Sat -> do
           putStrLn "Solver loop SAT, trying theory solver"
           model <- SMT.command s $ SMT.List [SMT.Atom "get-model"]
-          litAssigns <-
-            forM (Set.toList baseLits) $ \lit@(Literal (lhs, rhs))
-              --Only need our base literals, since all others are implied
-              --They speed up SAT but slow down theory solver
-             -> do
-              result <- SMT.getExpr s $ litFun lit
-              let resultBool =
-                    case result of
-                      SMT.Bool b -> b
-                      SMT.Bits _ v -> v == 1
-                      x ->
-                        error $ "Got bad boolean back from function: " ++ show x
-              case resultBool of
-                True -> return $ lhs `Sub` rhs
-                False -> return $ lhs `NotSub` rhs
-          SMT.simpleCommand s ["push"]
-          --putStrLn $ "Outer loop trying: " ++ show litAssigns
-          result <- Solver.makePred s options (nonEmptyExpr, litAssigns) --TODO make better name
-          SMT.simpleCommand s ["pop"]
-          case result of
-            Left lemma -> do
-              SMT.assert s $ makeLemma litFun lemma
-              solverLoop (i + 1)
-            Right _ ->
-              putStrLn $ "SAT in " ++ show (i + 1) ++ " theory iterations"
-          return ()
+          allLitAssigns <-
+            forM litPartitions $ \part ->
+              forM part $ \lit@(Literal (lhs, rhs)) -> do
+                result <- SMT.getExpr s $ litFun lit
+                let resultBool =
+                      case result of
+                        SMT.Bool b -> b
+                        SMT.Bits _ v -> v == 1
+                        x ->
+                          error $
+                          "Got bad boolean back from function: " ++ show x
+                case resultBool of
+                  True -> return $ lhs `Sub` rhs
+                  False -> return $ lhs `NotSub` rhs
+          --Iterate through our partitions until one fails, or all succeed
+          findResults i allLitAssigns
+    findResults i [] =
+      putStrLn $ "SAT in " ++ show (i + 1) ++ " theory iterations"
+    findResults i (litAssigns:rest) = do
+      SMT.simpleCommand s ["push"]
+      result <- Solver.makePred s options (nonEmptyExpr, litAssigns) --TODO make better name
+      SMT.simpleCommand s ["pop"]
+      case result of
+        Left lemma -> do
+          SMT.assert s $ makeLemma litFun lemma
+          solverLoop (i + 1)
+        Right _ -> findResults i rest
       return ()
     assertTransitive =
       let bitNames = map (\i -> "bit_" ++ show i) [0 .. numBits - 1]
@@ -187,3 +198,29 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
     subsetLemmaFor lhs@(FunApp f _) rhs@(FunApp g _)
       | f /= g = [CNot $ lhs `sub` rhs]
     subsetLemmaFor _ _ = []
+    partitionLiterals :: Set.Set Literal -> [[Literal]]
+    partitionLiterals lits = map ((map getLit) . flatten) $ components graph
+      where
+        litList = Set.toList lits
+        allSubsetEdges = Set.map unLiteral lits
+        allSubExprEdges =
+          Set.fromList $
+          concatMap subExprEdges $ (map litLhs litList) ++ (map litRhs litList)
+        allExprEdges =
+          Set.unions
+            [ allSubsetEdges
+            , allSubExprEdges
+            , Set.map swap allSubsetEdges
+            , Set.map swap allSubExprEdges
+            ]
+        hasEdge (Literal (e1, e2)) (Literal (e3, e4)) =
+          not $
+          Set.null $
+          Set.intersection allExprEdges $
+          Set.fromList [(e, e') | e <- [e1, e2], e' <- [e3, e4]]
+        litEdges =
+          [ (lit, lit, [lit2 | lit2 <- litList, hasEdge lit lit2])
+          | lit <- litList
+          ]
+        (graph, vmap, kmap) = graphFromEdges litEdges
+        getLit = (\(a, _, _) -> a) . vmap

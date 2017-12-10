@@ -21,3 +21,4 @@ cabal.project.local
 .ghc.environment.*
 test.smt2
 *.out
+project-exe.prof.html

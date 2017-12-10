@@ -53,6 +53,11 @@ subExprEdges e =
   [(e, x) | x <- children e] ++ concatMap subExprEdges (children e)
 
 --Find the direct children of the given expression's AST root
+freeVars :: Expr -> [String]
+freeVars (Var x) = [x]
+freeVars e = concatMap freeVars $ children e
+
+--Find the direct children of the given expression's AST root
 children :: Expr -> [Expr]
 children (Var v) = []
 children (Union x y) = [x, y]
@@ -181,6 +186,8 @@ newtype Literal = Literal
 litLhs (Literal (e, _)) = e
 
 litRhs (Literal (_, e)) = e
+
+litFreeVars (Literal (e1, e2)) = List.nub $ freeVars e1 ++ freeVars e2
 
 --Get the literals in a constraint expression
 literalsInCExpr :: CExpr -> Set.Set Literal

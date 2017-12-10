@@ -12,6 +12,7 @@ import SMTHelpers
 import qualified SimpleSMT as SMT
 import Syntax
 
+import Data.Either (rights)
 import Data.Graph
 import Data.Tree (flatten)
 import Data.Tuple (swap)
@@ -104,7 +105,7 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
         [ (e1, [e2 | Literal (e1', e2) <- litList, e1' == e1])
         | Literal (e1, _) <- litList
         ]
-    litPartitions = partitionLiterals lits
+    litPartitions = partitionLiterals litList
     toFloat = (fromIntegral :: Int -> Float)
     numBits = ceiling $ logBase 2 (toFloat $ Set.size lits)
     litType = replicate numBits SMT.tBool
@@ -198,29 +199,11 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
     subsetLemmaFor lhs@(FunApp f _) rhs@(FunApp g _)
       | f /= g = [CNot $ lhs `sub` rhs]
     subsetLemmaFor _ _ = []
-    partitionLiterals :: Set.Set Literal -> [[Literal]]
-    partitionLiterals lits = map ((map getLit) . flatten) $ components graph
+    partitionLiterals :: [Literal] -> [[Literal]]
+    partitionLiterals lits =
+      map (rights . (map getLit) . flatten) $ components graph
       where
-        litList = Set.toList lits
-        allSubsetEdges = Set.map unLiteral lits
-        allSubExprEdges =
-          Set.fromList $
-          concatMap subExprEdges $ (map litLhs litList) ++ (map litRhs litList)
-        allExprEdges =
-          Set.unions
-            [ allSubsetEdges
-            , allSubExprEdges
-            , Set.map swap allSubsetEdges
-            , Set.map swap allSubExprEdges
-            ]
-        hasEdge (Literal (e1, e2)) (Literal (e3, e4)) =
-          not $
-          Set.null $
-          Set.intersection allExprEdges $
-          Set.fromList [(e, e') | e <- [e1, e2], e' <- [e3, e4]]
-        litEdges =
-          [ (lit, lit, [lit2 | lit2 <- litList, hasEdge lit lit2])
-          | lit <- litList
-          ]
-        (graph, vmap, kmap) = graphFromEdges litEdges
+        litVarEdges =
+          [(Right lit, Right lit, map Left (litFreeVars lit)) | lit <- litList]
+        (graph, vmap, kmap) = graphFromEdges litVarEdges
         getLit = (\(a, _, _) -> a) . vmap

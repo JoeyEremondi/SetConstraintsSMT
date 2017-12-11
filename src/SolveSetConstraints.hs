@@ -16,6 +16,7 @@ import Data.Either (rights)
 import Data.Graph
 import Data.Tree (flatten)
 import Data.Tuple (swap)
+import Debug.Trace (trace)
 
 formulaForCExpr :: (Literal -> SMT.SExpr) -> CExpr -> SMT.SExpr
 formulaForCExpr litNum cexp =
@@ -59,9 +60,12 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   --Assert the SMT version of our expression
   SMT.assert s $ formulaForCExpr litFun c
   putStrLn $
-    "Done asserting formula, " ++ show (Set.size baseLits) ++ " base literals"
+    "Done asserting formula, " ++
+    show (Set.size baseLits) ++
+    " base literals, " ++ show (Set.size lits) ++ " literals total"
   putStrLn $
-    "Partitioned into " ++ show (length litPartitions) ++ " subproblems"
+    "Partitioned into " ++
+    show (length litPartitions) ++ " subproblems: " ++ show (litPartitions)
   -- forM [(e1, e2) | e1 <- exprList, e2 <- exprList] $
   --   uncurry subsetLemmaFor
   putStrLn "Done asserting subset properties"
@@ -105,7 +109,7 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
         [ (e1, [e2 | Literal (e1', e2) <- litList, e1' == e1])
         | Literal (e1, _) <- litList
         ]
-    litPartitions = partitionLiterals litList
+    litPartitions = partitionLiterals
     toFloat = (fromIntegral :: Int -> Float)
     numBits = ceiling $ logBase 2 (toFloat $ Set.size lits)
     litType = replicate numBits SMT.tBool
@@ -185,8 +189,8 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
     --Assume our lattice is not degenerate
     subsetLemmaFor Top Bottom = [CNot $ Top `sub` Bottom]
     --Everything a subset of itself
-    subsetLemmaFor lhs rhs
-      | lhs == rhs = [lhs `sub` rhs]
+    -- subsetLemmaFor lhs rhs
+    --   | lhs == rhs = [lhs `sub` rhs]
     -- A subset of A U B
     subsetLemmaFor lhs rhs@(Union e1 e2)
       | lhs `List.elem` [e1, e2] = [lhs `sub` rhs]
@@ -199,11 +203,12 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
     subsetLemmaFor lhs@(FunApp f _) rhs@(FunApp g _)
       | f /= g = [CNot $ lhs `sub` rhs]
     subsetLemmaFor _ _ = []
-    partitionLiterals :: [Literal] -> [[Literal]]
-    partitionLiterals lits =
-      map (rights . (map getLit) . flatten) $ components graph
+    partitionLiterals :: [[Literal]]
+    partitionLiterals = map (rights . (map getLit) . flatten) $ components graph
       where
         litVarEdges =
           [(Right lit, Right lit, map Left (litFreeVars lit)) | lit <- litList]
-        (graph, vmap, kmap) = graphFromEdges litVarEdges
+        varEdges =
+          List.nub [(v, v, []) | (_, _, vList) <- litVarEdges, v <- vList]
+        (graph, vmap, kmap) = graphFromEdges (litVarEdges ++ varEdges)
         getLit = (\(a, _, _) -> a) . vmap

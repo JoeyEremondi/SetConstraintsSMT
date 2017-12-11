@@ -104,4 +104,4 @@ makeSolver opts = do
         , "--disable-banner"
         ]
         (Just l)
-    _ -> SMT.newSolver "z3" ["-in"] (Just l)
+    _ -> SMT.newSolver "z3" ["-in", "-st", "-v:10"] (Just l)

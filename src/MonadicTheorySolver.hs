@@ -29,6 +29,8 @@ import qualified Data.Set as Set
 
 import ArgParse
 
+import Data.Graph
+
 makeBvType :: Integral a => a -> [SMT.SExpr]
 makeBvType n = replicate (fromInteger $ toInteger n) SMT.tBool
 
@@ -101,7 +103,9 @@ enumerateDomain s numPreds bvType = do
   where
     domainVal = nameToBits numPreds "domain-val"
     helper accum = do
+      putStrLn "Doing check in theory solver"
       result <- SMT.check s
+      putStrLn "Done check in theory solver"
       case result of
         SMT.Sat -> do
           valueExpr <- getBitVec s domainVal
@@ -117,7 +121,6 @@ enumerateProductions s bvType funs
   -- SMT.assert s $
   --   (isFProduction f) $$ (unwrap fromSymbol ++ concatMap unwrap allArgs)
  = do
-  putStrLn $ "In Theory Solver with" ++ show numPreds ++ " predicates"
   let initialMap = Map.fromList [(f, Set.empty) | f <- funs]
   helper Set.empty initialMap
   where
@@ -225,9 +228,9 @@ declareOrDefineFuns ::
   -> t
   -> [SExpr]
   -> PredNumConfig
-  -> [Expr]
+  -> [SCC Expr]
   -> IO [[()]]
-declareOrDefineFuns s numPreds bvType state subExprs = do
+declareOrDefineFuns s numPreds bvType state sccs = do
   let funs = Map.elems $ funVals state
   forM funs $ \f -> do
     let allArgNums = [0 .. (arity f) - 1]
@@ -241,20 +244,33 @@ declareOrDefineFuns s numPreds bvType state subExprs = do
             True -> (funBitNames List.!! (fromIntegral i))
           where
             i = bitFor e
+    let canDefine scc =
+          case scc of
+            _ -> _
+        (toDefine, toDeclare) = partition canDefine sccs
     --Define the ith-bit functions for our constructor when we can
     --Otherwise, just declare them
-    forM subExprs $ \expr
+    forM toDeclare $ \scc
       --TODO put back define case?
      -> do
-      case expr of
-        Var _ -> do
+      case scc of
+        AcyclicSCC expr@(Var _) -> do
           declareFun
             s
             (funFor expr)
             (concat $ replicate (arity f) bvType)
             SMT.tBool
           return ()
-        _
+        CyclicSCC exprList@(expr:_) -> do
+          declareFun
+            s
+            (funFor expr)
+            (concat $ replicate (arity f) bvType)
+            SMT.tBool
+          return ()
+    forM toDefine $ \scc ->
+      case scc of
+        AcyclicSCC expr
           -- putStrLn $ "** Defining function for " ++ show expr
          -> do
           let funBody =
@@ -306,6 +322,12 @@ declareDomain s numPreds bvType boolDomPreds boolDomArgName
     SMT.tBool $
     (booleanDomain $$$ [domainArg]) /\ (funDomain $$$ [domainArg])
 
+equalityClasses :: [Constr] -> [Expr] -> [SCC Expr]
+equalityClasses constrs exprs = stronglyConnComp edges
+  where
+    edges =
+      [(e1, e1, List.nub [e2 | Sub e e2 <- constrs, e == e1]) | e1 <- exprs]
+
 --TODO include constratailint stuff
 makePred ::
      SMT.Solver
@@ -318,18 +340,21 @@ makePred s options (nonEmpty, initialCList)
   let clist = (nonEmpty `NotSub` Bottom) : initialCList
       subExprs = orderedSubExpressions clist
       (posList, negList) = List.partition isPos clist
-      numPreds = length subExprs
       theMaxArity = maxArity subExprs
       numForall = 2 + theMaxArity
-      constrNums = allExprNums subExprs
+      -- constrNums = allExprNums subExprs
       bvType = makeBvType numPreds
       vars =
         map (\i -> nameToBits numPreds $ "y_univ_" ++ show i) [1 .. numForall]
-      state0 = (initialState numPreds vars subExprs)
+      state0 = (initialState numPreds vars subExprs $ map flattenSCC eqClasses)
       funs :: [VecFun] = Map.elems $ funVals state0
       allFreeVars :: [Expr] = filter isVar subExprs
       boolDomArgName = "z_boolDomain"
       boolDomArg = nameToBits numPreds boolDomArgName
+      eqClasses = equalityClasses clist subExprs
+      numPreds = length eqClasses
+  putStrLn $ "In theory solver, numBits: " ++ show numPreds
+  putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
   let comp = do
         boolDomPredList <- forM subExprs (booleanDomainClause boolDomArg)
         posConstrPreds <- forM posList (posConstrClause boolDomArg)
@@ -351,20 +376,26 @@ makePred s options (nonEmpty, initialCList)
           , negConstrPreds)
   let ((funDomPreds, boolDomPreds, negPreds), state) = runState comp state0
   --Declare our domain function and its subfunctions
+  putStrLn "Declaring domain"
   declareDomain s numPreds bvType boolDomPreds boolDomArgName
   --Declare or define the functions for each constructor in our Herbrand universe
-  declareOrDefineFuns s numPreds bvType state subExprs
+  putStrLn "Declaring constructors"
+  declareOrDefineFuns s numPreds bvType state eqClasses
   --Declare functions that determines if a production is valid
-  declareProdFuncions s numPreds bvType funs theMaxArity
+  -- declareProdFuncions s numPreds bvType funs theMaxArity
   --Declare our existential variables
+  putStrLn "Declaring existentials"
   forM (existentialVars state) $ \v -> do
     declareVec s v bvType
     --Assert that each existential variable is in our domain
     SMT.assert s $ domain $$$ [nameToBits numPreds v]
   --Assert the properties of each existential variable
+  putStrLn "Assert existential properties"
   forM negPreds $ SMT.assert s
   --Assert our domain properties
+  putStrLn "Asserting function domain properties"
   SMT.assert s funDomPreds
+  putStrLn "About do check SAT"
   result <- SMT.check s
   --TODO minimize?
   case result of

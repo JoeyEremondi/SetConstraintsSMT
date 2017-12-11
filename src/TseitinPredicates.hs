@@ -16,6 +16,7 @@ import SMTHelpers
 import Data.Char (isAlphaNum)
 import qualified Data.Set as Set
 
+import Data.Graph
 import Debug.Trace (trace)
 
 domain = Fun "domain"
@@ -27,13 +28,14 @@ funDomain = Fun "functionDomain"
 -- type SBVec = SMT.BitVec
 data PredNumConfig = Config
   { predNums :: Map.Map Expr Integer
+  , configNumPreds :: Int
   , funVals :: Map.Map String VecFun
   , universalVars :: [BitVector]
   , existentialVars :: [String]
   }
 
 getNumPreds :: ConfigM Int
-getNumPreds = (Map.size . predNums) <$> get
+getNumPreds = configNumPreds <$> get
 
 type ConfigM = State PredNumConfig
 
@@ -136,17 +138,19 @@ funClause f = do
   let fxs = bvApply n f xs
   return $ domain $$$ [fxs]
 
-initialState numBits vars exprs =
-  Config
-  { predNums = allExprNums exprs
-  , funVals =
-      Map.fromList
-        [ (f, VecFun f (replicate ar [0 .. numBits - 1]))
-        | (f, ar) <- Map.toList $ getArities exprs
-        ]
-  , universalVars = vars
-  , existentialVars = []
-  }
+initialState numBits vars exprs connComps =
+  let (predMap, numPreds) = allExprNums connComps
+  in Config
+     { predNums = predMap
+     , configNumPreds = numPreds
+     , funVals =
+         Map.fromList
+           [ (f, VecFun f (replicate ar [0 .. numBits - 1]))
+           | (f, ar) <- Map.toList $ getArities exprs
+           ]
+     , universalVars = vars
+     , existentialVars = []
+     }
 
 fresh :: Integral i => i -> ConfigM BitVector
 fresh numPreds = do

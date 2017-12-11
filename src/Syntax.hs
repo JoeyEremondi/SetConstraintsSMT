@@ -110,8 +110,11 @@ orderedSubExpressions clist =
     (g, unVertex, unKey) = Graph.graphFromEdges edges
     topologicalOrder = Graph.topSort g
 
-allExprNums :: SubExprs -> Map.Map Expr Integer
-allExprNums elist = Map.fromList $ zip elist [0 ..]
+allExprNums :: [[Expr]] -> (Map.Map Expr Integer, Int)
+allExprNums sccList =
+  let sccPairs = zip sccList [0 ..]
+      exprPairs = [(e, num) | (elist, num) <- sccPairs, e <- elist]
+  in (Map.fromList exprPairs, length sccList)
 
 maxArity :: [Expr] -> Int
 maxArity es = List.maximum $ (0 :) $ Maybe.catMaybes $ List.map getArity es
@@ -187,7 +190,9 @@ litLhs (Literal (e, _)) = e
 
 litRhs (Literal (_, e)) = e
 
-litFreeVars (Literal (e1, e2)) = List.nub $ freeVars e1 ++ freeVars e2
+litFreeVars lit@(Literal (e1, e2)) =
+  let ret = List.nub $ freeVars e1 ++ freeVars e2
+  in ret
 
 --Get the literals in a constraint expression
 literalsInCExpr :: CExpr -> Set.Set Literal

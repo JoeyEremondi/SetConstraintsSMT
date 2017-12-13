@@ -31,6 +31,8 @@ import ArgParse
 
 import Data.Graph
 
+import GHC.Exts (sortWith)
+
 makeBvType :: Integral a => a -> [SMT.SExpr]
 makeBvType n = replicate (fromInteger $ toInteger n) SMT.tBool
 
@@ -246,13 +248,16 @@ declareOrDefineFuns s numPreds bvType state sccs = do
             i = bitFor e
     let canDefine scc =
           case scc of
-            _ -> _
+            AcyclicSCC (Var _) -> False
+            AcyclicSCC _ -> True
+            CyclicSCC _ -> False --TODO check for self-reference
         (toDefine, toDeclare) = partition canDefine sccs
     --Define the ith-bit functions for our constructor when we can
     --Otherwise, just declare them
     forM toDeclare $ \scc
       --TODO put back define case?
      -> do
+      putStrLn $ "Declaring SCC" ++ show (flattenSCC scc) ++ "for " ++ show f
       case scc of
         AcyclicSCC expr@(Var _) -> do
           declareFun
@@ -268,7 +273,8 @@ declareOrDefineFuns s numPreds bvType state sccs = do
             (concat $ replicate (arity f) bvType)
             SMT.tBool
           return ()
-    forM toDefine $ \scc ->
+    forM toDefine $ \scc -> do
+      putStrLn $ "Defining SCC" ++ show (flattenSCC scc) ++ "for " ++ show f
       case scc of
         AcyclicSCC expr
           -- putStrLn $ "** Defining function for " ++ show expr
@@ -323,10 +329,17 @@ declareDomain s numPreds bvType boolDomPreds boolDomArgName
     (booleanDomain $$$ [domainArg]) /\ (funDomain $$$ [domainArg])
 
 equalityClasses :: [Constr] -> [Expr] -> [SCC Expr]
-equalityClasses constrs exprs = stronglyConnComp edges
+equalityClasses constrs exprs = sortedSCCs
   where
     edges =
       [(e1, e1, List.nub [e2 | Sub e e2 <- constrs, e == e1]) | e1 <- exprs]
+    sortWithinSCC (AcyclicSCC e) = AcyclicSCC e
+    sortWithinSCC (CyclicSCC l) = CyclicSCC $ sortWith exprInt l
+    theSCCs = stronglyConnComp edges
+    sortedSCCs = sortWith sccInt $ map sortWithinSCC $ theSCCs
+    exprMap = Map.fromList $ zip exprs [0 ..]
+    exprInt = (exprMap Map.!)
+    sccInt = (exprInt . head . flattenSCC)
 
 --TODO include constratailint stuff
 makePred ::

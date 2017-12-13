@@ -335,7 +335,7 @@ equalityClasses constrs exprs = sortedSCCs
       [(e1, e1, List.nub [e2 | Sub e e2 <- constrs, e == e1]) | e1 <- exprs]
     sortWithinSCC (AcyclicSCC e) = AcyclicSCC e
     sortWithinSCC (CyclicSCC l) = CyclicSCC $ sortWith exprInt l
-    theSCCs = stronglyConnComp edges
+    theSCCs = map AcyclicSCC exprs--stronglyConnComp edges
     sortedSCCs = sortWith sccInt $ map sortWithinSCC $ theSCCs
     exprMap = Map.fromList $ zip exprs [0 ..]
     exprInt = (exprMap Map.!)

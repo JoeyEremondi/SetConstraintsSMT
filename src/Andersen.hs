@@ -6,6 +6,7 @@ import Control.Applicative ((<|>), many)
 import Control.Monad (forM, void)
 import Data.Char (isDigit, isLetter)
 import Data.Either (rights)
+import Data.Hashable (hash)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import Syntax
@@ -13,6 +14,8 @@ import Text.Parsec (ParseError, oneOf, parse, sepBy, try)
 import Text.Parsec.Char (char, digit, letter, string)
 import Text.Parsec.Combinator (many1, notFollowedBy)
 import Text.Parsec.String (Parser)
+
+numLines = 38
 
 -- import Text.Parsec.String.Char (char, digit, oneOf, satisfy)
 -- import Text.Parsec.String.Combinator (chainl1, choice, many1)
@@ -112,7 +115,8 @@ constr = do
   return (e1, e2)
 
 parseBansheeString :: String -> CExpr
-parseBansheeString input = toCExpr $ rights $ map parseConstr $ lines input
+parseBansheeString input =
+  toCExpr $ rights $ map parseConstr $ (take numLines . lines) input
 
 toCExpr :: [AConstr] -> CExpr
 toCExpr constrs = CAnd $ map (singleToCExpr arityMap) constrs
@@ -128,7 +132,7 @@ singleToCExpr arityMap (e1, e2) = helper allProjs Map.empty
     helper [] projMap = CSubset (toSetExpr projMap e1) (toSetExpr projMap e2)
     helper (proj@(AProj funName argNum expr):rest) projMap =
       withProjection
-        "__freshVarName" --TODO make this unique
+        ("__freshVarName" ++ (show $ hash $ show proj))
         (arityMap Map.! funName)
         (Projection funName argNum (toSetExpr projMap expr))
         (\projExp -> helper rest $ Map.insert proj projExp projMap)
@@ -152,9 +156,9 @@ parseExpr = parse expr ""
 
 parseFile :: String -> IO [Either ParseError AConstr]
 parseFile f = do
-  theLines <- lines <$> readFile f
+  theLines <- (take numLines . lines) <$> readFile f
   return $ filter isLeft $ map parseConstr theLines
 
 parseHead f = do
-  theLines <- lines <$> readFile f
+  theLines <- (take numLines . lines) <$> readFile f
   return $ parseConstr $ head theLines

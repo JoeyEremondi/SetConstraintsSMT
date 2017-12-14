@@ -54,6 +54,7 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   --
  = do
   SMT.simpleCommand s ["set-logic", "UF"]
+  SMT.simpleCommand s ["set-option", ":smt.mbqi", "true"]
   SMT.simpleCommand s ["push"]
   -- SMT.declareFun s "literalValue" litType SMT.tBool
   forM literalNames $ \(SMT.Atom ln) -> SMT.declare s ln SMT.tBool

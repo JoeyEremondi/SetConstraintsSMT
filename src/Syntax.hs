@@ -176,11 +176,9 @@ withProjection freshName arity proj f =
       projConstr = (FunApp (projFun proj) args) `eq` (projOf proj)
       --Assert that the variable arguments are empty iff the RHS is empty
       --This is necessary, since F(X1...Xk) is empty if any Xi is empty
-      projEqConstrs =
-        map
-          (\arg -> (CSubset arg Bottom) `CIff` (CSubset (projOf proj) Bottom))
-          args
-  in CAnd $ [result, projConstr] ++ projEqConstrs
+      projEqConstr =
+        (CSubset projVar Bottom) `CIff` (CSubset (projOf proj) Bottom)
+  in CAnd $ [result, projConstr, projEqConstr]
 
 newtype Literal = Literal
   { unLiteral :: (Expr, Expr)

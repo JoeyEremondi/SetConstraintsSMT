@@ -256,8 +256,8 @@ declareOrDefineFuns s numPreds bvType state sccs = do
     --Otherwise, just declare them
     forM toDeclare $ \scc
       --TODO put back define case?
+      -- putStrLn $ "Declaring SCC" ++ show (flattenSCC scc) ++ "for " ++ show f
      -> do
-      putStrLn $ "Declaring SCC" ++ show (flattenSCC scc) ++ "for " ++ show f
       case scc of
         AcyclicSCC expr@(Var _) -> do
           declareFun
@@ -273,8 +273,9 @@ declareOrDefineFuns s numPreds bvType state sccs = do
             (concat $ replicate (arity f) bvType)
             SMT.tBool
           return ()
-    forM toDefine $ \scc -> do
-      putStrLn $ "Defining SCC" ++ show (flattenSCC scc) ++ "for " ++ show f
+    forM toDefine $ \scc
+      -- putStrLn $ "Defining SCC" ++ show (flattenSCC scc) ++ "for " ++ show f
+     -> do
       case scc of
         AcyclicSCC expr
           -- putStrLn $ "** Defining function for " ++ show expr
@@ -313,20 +314,20 @@ declareDomain s numPreds bvType boolDomPreds boolDomArgName
  = do
   SMT.defineFun
     s
-    "booleanDomain"
+    "domain"
     (zip (nameToBitNames numPreds boolDomArgName) bvType)
     SMT.tBool
     boolDomPreds
-  SMT.declareFun s "functionDomain" bvType SMT.tBool
+  -- SMT.declareFun s "functionDomain" bvType SMT.tBool
   --TODO split into separate functions
-  let domainArgName = "arg-domain"
-  let domainArg = nameToBits numPreds domainArgName
-  defineFun
-    s
-    domain
-    (zip (nameToBitNames numPreds domainArgName) bvType)
-    SMT.tBool $
-    (booleanDomain $$$ [domainArg]) /\ (funDomain $$$ [domainArg])
+  -- let domainArgName = "arg-domain"
+  -- let domainArg = nameToBits numPreds domainArgName
+  -- defineFun
+  --   s
+  --   domain
+  --   (zip (nameToBitNames numPreds domainArgName) bvType)
+  --   SMT.tBool $
+  --   (booleanDomain $$$ [domainArg]) /\ (funDomain $$$ [domainArg])
 
 equalityClasses :: [Constr] -> [Expr] -> [SCC Expr]
 equalityClasses constrs exprs = sortedSCCs
@@ -335,7 +336,7 @@ equalityClasses constrs exprs = sortedSCCs
       [(e1, e1, List.nub [e2 | Sub e e2 <- constrs, e == e1]) | e1 <- exprs]
     sortWithinSCC (AcyclicSCC e) = AcyclicSCC e
     sortWithinSCC (CyclicSCC l) = CyclicSCC $ sortWith exprInt l
-    theSCCs = map AcyclicSCC exprs--stronglyConnComp edges
+    theSCCs = map AcyclicSCC exprs --stronglyConnComp edges
     sortedSCCs = sortWith sccInt $ map sortWithinSCC $ theSCCs
     exprMap = Map.fromList $ zip exprs [0 ..]
     exprInt = (exprMap Map.!)

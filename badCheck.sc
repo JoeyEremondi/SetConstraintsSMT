@@ -16,7 +16,7 @@
   , CImplies
       (CNot
          (CSubset
-            (Intersect (FunApp "Null" []) (FunApp "Cons" [Top, Top]))
+            (Intersect (Intersect (Neg (FunApp "Null" [])) (FunApp "Cons" [Top, Top])) (Var "X"))
             Bottom))
       (CAnd
          [ CSubset
@@ -33,11 +33,11 @@
   , CImplies
       (CAnd
          [ CSubset
-             (Intersect (FunApp "Null" []) (FunApp "Cons" [Top, Top]))
+             (Intersect (Intersect (Neg (FunApp "Null" [])) (FunApp "Cons" [Top, Top])) (Var "X"))
              Bottom
          , CSubset
              Bottom
-             (Intersect (FunApp "Null" []) (FunApp "Cons" [Top, Top]))
+             (Intersect (Intersect (Neg (FunApp "Null" [])) (FunApp "Cons" [Top, Top])) (Var "X"))
          ])
       (CAnd [CSubset (Var "C2") Bottom, CSubset Bottom (Var "C2")])
   , CAnd

@@ -180,6 +180,16 @@ withProjection freshName arity proj f =
         (CSubset projVar Bottom) `CIff` (CSubset (projOf proj) Bottom)
   in CAnd $ [result, projConstr, projEqConstr]
 
+withProjectionLhs :: String -> Int -> Projection -> (Expr -> CExpr) -> CExpr
+withProjectionLhs freshName arity proj f =
+  let 
+      projVar = Var freshName
+      result = f projVar
+      topWithExpr = (replicate (-1 + projArgNum proj) Top) ++ [projVar] ++ (replicate (arity - projArgNum proj) Top)
+      --Assert that our expression is equal to the function applied to some fresh variables
+      projConstr = ((projOf proj) `Intersect` (FunApp (projFun proj) (replicate arity Top))) `sub` (FunApp (projFun proj) topWithExpr)
+  in CAnd $ [result, projConstr]
+
 newtype Literal = Literal
   { unLiteral :: (Expr, Expr)
   } deriving (Eq, Ord, Show)

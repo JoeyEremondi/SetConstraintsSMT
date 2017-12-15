@@ -15,7 +15,7 @@ import Text.Parsec.Char (char, digit, letter, string)
 import Text.Parsec.Combinator (many1, notFollowedBy)
 import Text.Parsec.String (Parser)
 
-numLines = 38
+numLines = 20000000
 
 -- import Text.Parsec.String.Char (char, digit, oneOf, satisfy)
 -- import Text.Parsec.String.Combinator (chainl1, choice, many1)
@@ -131,7 +131,7 @@ singleToCExpr arityMap (e1, e2) = helper allProjs Map.empty
     allProjs = List.nub $ concatMap projections [e1, e2]
     helper [] projMap = CSubset (toSetExpr projMap e1) (toSetExpr projMap e2)
     helper (proj@(AProj funName argNum expr):rest) projMap =
-      withProjection
+      withProjectionLhs
         ("__freshVarName" ++ (show $ hash $ show proj))
         (arityMap Map.! funName)
         (Projection funName argNum (toSetExpr projMap expr))

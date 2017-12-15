@@ -53,6 +53,7 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   --Declare our inclusion function
   --
  = do
+  putStrLn $ "cInitial: " ++ show cInitial
   SMT.simpleCommand s ["set-logic", "UF"]
   SMT.simpleCommand s ["set-option", ":smt.mbqi", "true"]
   SMT.simpleCommand s ["push"]

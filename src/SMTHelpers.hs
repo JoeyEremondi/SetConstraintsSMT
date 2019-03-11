@@ -1,6 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE TypeSynonymInstances #-}
+
 {-# LANGUAGE FlexibleInstances #-}
 
 module SMTHelpers where
@@ -28,12 +28,10 @@ defineFun s (Fun f) = SMT.defineFun s f
 declareFun s (Fun f) = SMT.declareFun s f
 
 getBitVec :: SMT.Solver -> BitVector -> IO BitVector
-getBitVec s bv = do
-  resultBits <-
-    forM (bv) $ \bit -> do
-      v <- SMT.getExpr s bit
-      return $ SMT.value v
-  return resultBits
+getBitVec s bv =
+  forM bv $ \bit -> do
+    v <- SMT.getExpr s bit
+    return $ SMT.value v
 
 newtype Fun = Fun
   { unFun :: String
@@ -83,7 +81,7 @@ bvApply n vf args =
 -- bvMap :: Integral i => i -> Fun -> [BitVector] -> [SMT.SExpr]
 -- bvMap n f args = bvApplyHelper (replicate (fromIntegral n) f) (map unwrap args)
 bvApplyHelper fs [] = map ($$ []) fs
-bvApplyHelper fs args = zipWith (\f x -> f $$ concat x) fs (repeat args)
+bvApplyHelper fs args = map (\ x -> (\f x -> f $$ concat x) x args) fs
 
 vecEq :: BitVector -> BitVector -> SMT.SExpr
 vecEq (BitVector b1) (BitVector b2) = andAll $ zipWith SMT.eq b1 b2

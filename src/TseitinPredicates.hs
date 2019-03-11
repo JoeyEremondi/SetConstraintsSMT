@@ -11,8 +11,6 @@ import qualified Data.Map as Map
 import Data.Map ((!))
 import qualified Data.Maybe as Maybe
 
-import SMTHelpers
-
 import Data.Char (isAlphaNum)
 import qualified Data.Set as Set
 
@@ -35,39 +33,39 @@ data PredNumConfig = Config
   }
 
 getNumPreds :: ConfigM Int
-getNumPreds = configNumPreds <$> get
+getNumPreds = gets configNumPreds
 
 type ConfigM = State PredNumConfig
 
 
 
 getAllFunctions :: ConfigM [VecFun]
-getAllFunctions = (Map.elems . funVals) <$> get
+getAllFunctions = gets (Map.elems . funVals)
 
 p :: Expr -> BitVector -> ConfigM SMT.SExpr
 p e x = do
   n <- getNumPreds
-  i <- ((Map.! e) . predNums) <$> get
+  i <- gets ((Map.! e) . predNums)
     -- let xi = SMT.extract x (toInteger i) (toInteger i)
   return $ ithBit i x n
 
 ithBit i (BitVector x) n = x List.!! (fromInteger i)
 
 forallVar :: ConfigM BitVector
-forallVar = do
+forallVar =
   head <$> forallVars 1
 
 forallVars :: Int -> ConfigM [BitVector]
-forallVars n = (take n . universalVars) <$> get
+forallVars n = gets (take n . universalVars)
 
 differentFuns :: VecFun -> ConfigM [(VecFun, Int)]
 differentFuns f = do
-  funMap <- funVals <$> get
+  funMap <- gets funVals
   return [(g, arity g) | g <- Map.elems funMap, vecFunName g /= vecFunName f]
 
 funNamed :: String -> ConfigM VecFun
 funNamed f = do
-  funs <- funVals <$> get
+  funs <- gets funVals
   return $ funs Map.! f
 
 functionDomainClause :: Expr -> ConfigM SMT.SExpr
@@ -92,8 +90,8 @@ functionDomainClause e = do
       return $ eqCond /\ andAll neqConds
     _ -> return $ SMT.bool True
 
-booleanDomainClause :: BitVector -> Expr -> ConfigM (SMT.SExpr)
-booleanDomainClause x e = do
+booleanDomainClause :: BitVector -> Expr -> ConfigM SMT.SExpr
+booleanDomainClause x e =
   case e of
     Var _ -> return $ SMT.bool True
     Neg e2 -> do
@@ -110,9 +108,8 @@ booleanDomainClause x e = do
       pa <- p a x
       pb <- p b x
       return $ pe === (pa /\ pb)
-    Top -> do
-      px <- p e x
-      return px
+    Top ->
+      p e x
     Bottom -> do
       px <- p e x
       return $ SMT.not px

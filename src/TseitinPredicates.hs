@@ -39,6 +39,8 @@ getNumPreds = configNumPreds <$> get
 
 type ConfigM = State PredNumConfig
 
+
+
 getAllFunctions :: ConfigM [VecFun]
 getAllFunctions = (Map.elems . funVals) <$> get
 
@@ -53,8 +55,7 @@ ithBit i (BitVector x) n = x List.!! (fromInteger i)
 
 forallVar :: ConfigM BitVector
 forallVar = do
-  [v] <- forallVars 1
-  return v
+  head <$> forallVars 1
 
 forallVars :: Int -> ConfigM [BitVector]
 forallVars n = (take n . universalVars) <$> get

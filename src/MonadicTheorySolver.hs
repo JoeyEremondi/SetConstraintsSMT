@@ -1,14 +1,13 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE StandaloneDeriving #-}
+
 {-# LANGUAGE PatternSynonyms #-}
 
 module MonadicTheorySolver where
 
 import SMTHelpers
-import qualified SimpleSMT as SMT hiding (tBits)
 import Syntax
 import TseitinPredicates
 
@@ -20,8 +19,6 @@ import Data.Map ((!))
 import qualified Data.Maybe as Maybe
 import qualified SimpleSMT as SMT
 import SimpleSMT (SExpr)
-
-import SMTHelpers
 import TreeGrammar
 
 import Data.Char (isAlphaNum)
@@ -56,48 +53,48 @@ isFProduction f = Fun ("isProductionFor-" ++ vecFunName f)
 --productionFor i = "productionFor" ++ show i
 declareProdFuncions ::
      Integral i => SMT.Solver -> i -> [SExpr] -> [VecFun] -> Int -> IO ()
-declareProdFuncions s numPreds bvType funs maxArity = do
-  forM funs $ \f -> do
-    let prodFromName = "fromSymb"
-    let prodFrom = nameToBits numPreds prodFromName
-    let prodToNames =
-          map
-            (\i -> nameToBitNames numPreds $ "toSymb" ++ show i)
-            [0 .. (arity f) - 1]
-    let prodTos :: [BitVector] = map (BitVector . (map SMT.Atom)) prodToNames
-    let prodFromPairs = zip (nameToBitNames numPreds prodFromName) bvType
-    let prodToPairs = zip (concat prodToNames) (repeat SMT.tBool)
-    let fTos = BitVector [bitf $$$ prodTos | bitf <- funToBitFuns numPreds f]
-    let eqToFunRet = vecEq prodFrom fTos
-    let (allInDomain :: SExpr) = andAll $ map (\v -> domain $$$ [v]) prodTos
-    defineFun
-      s
-      (isFProduction f)
-      (prodFromPairs ++ prodToPairs)
-      SMT.tBool
-      (eqToFunRet /\ (domain $$$ [prodFrom]) /\ allInDomain)
+declareProdFuncions s numPreds bvType funs maxArity =
+  forM_ funs $ \f -> do
+  let prodFromName = "fromSymb"
+  let prodFrom = nameToBits numPreds prodFromName
+  let prodToNames =
+        map
+          (\i -> nameToBitNames numPreds $ "toSymb" ++ show i)
+          [0 .. (arity f) - 1]
+  let prodTos :: [BitVector] = map (BitVector . (map SMT.Atom)) prodToNames
+  let prodFromPairs = zip (nameToBitNames numPreds prodFromName) bvType
+  let prodToPairs = zip (concat prodToNames) (repeat SMT.tBool)
+  let fTos = BitVector [bitf $$$ prodTos | bitf <- funToBitFuns numPreds f]
+  let eqToFunRet = vecEq prodFrom fTos
+  let (allInDomain :: SExpr) = andAll $ map (\v -> domain $$$ [v]) prodTos
+  defineFun
+    s
+    (isFProduction f)
+    (prodFromPairs ++ prodToPairs)
+    SMT.tBool
+    (eqToFunRet /\ (domain $$$ [prodFrom]) /\ allInDomain)
   -- forM [0 .. maxArity - 1] $ \argNum -> do
   --   SMT.declareFun s (productionFor argNum) [bvType] bvType
-  return ()
+  -- return ()
 
 withNForalls ::
      [BitVector] -> Integer -> ([BitVector] -> ConfigM SExpr) -> ConfigM SExpr
 withNForalls vars numBits comp = do
   result <- comp vars
-  return $ SMT.List $ [SMT.Atom "forall", SMT.List (varTypes), result]
+  return $ SMT.List [SMT.Atom "forall", SMT.List varTypes, result]
   where
     varTypes = [SMT.List [bit, SMT.tBool] | bv <- vars, bit <- bitList bv]
 
 validDomain :: ConfigM SExpr
 validDomain = do
-  vars <- universalVars <$> get
-  let varResults = (flip map) vars (\x -> domain $$$ [x])
+  vars <- gets universalVars
+  let varResults = map (\x -> domain $$$ [x]) vars
   return $ andAll varResults
 
 enumerateDomain :: Integral i => SMT.Solver -> i -> [SExpr] -> IO [BitVector]
 enumerateDomain s numPreds bvType = do
   SMT.simpleCommand s ["push"]
-  declareVec s ("domain-val") bvType
+  declareVec s "domain-val" bvType
   SMT.assert s $ domain $$$ [domainVal]
   ret <- helper []
   SMT.simpleCommand s ["pop"]
@@ -136,7 +133,7 @@ enumerateProductions s bvType funs
       --Assert that, for some function, we've found its arguments
       --but we haven't found the production of our declared values yet for some function
      = do
-      (fResults) <-
+      fResults <-
         forM funs $ \f ->
           if (arity f) <= length foundVals
             then do
@@ -144,7 +141,7 @@ enumerateProductions s bvType funs
               let allArgNums = [0 .. (arity f) - 1]
                   allArgNames = map argName allArgNums
             --Declare arguments for the function
-              forM allArgNames $ \theArg -> declareVec s theArg bvType
+              forM_ allArgNames $ \theArg -> declareVec s theArg bvType
               let allArgs = map productionVal allArgNums
               let isFound arg =
                     orAll $ Set.toList $ Set.map (vecEq arg) $ foundVals
@@ -153,7 +150,7 @@ enumerateProductions s bvType funs
                     orAll $
                     Set.toList $ Set.map (prodEq prod) $ foundProds Map.! f
               --Assert that we've found all the arguments
-              forM allArgs $ \arg -> SMT.assert s $ isFound arg
+              forM_ allArgs $ \arg -> SMT.assert s $ isFound arg
               --Get expression for the function result
               let fx = bvApply numPreds f allArgs
               let prod = fx : allArgs
@@ -176,11 +173,11 @@ enumerateProductions s bvType funs
               return $ finalResult
             else return Nothing
       case Maybe.catMaybes fResults of
-        [] -> do
+        [] ->
           return $
-            concatMap
-              (\(f, prods) -> [(from, f, to) | (from:to) <- Set.toList prods]) $
-            Map.toList foundProds --We found nothing new
+          concatMap
+            (\(f, prods) -> [(from, f, to) | (from:to) <- Set.toList prods]) $
+          Map.toList foundProds --We found nothing new
         newProds -> do
           let updateMap (f, prod) dict =
                 Map.insert f (Set.insert prod (dict Map.! f)) dict
@@ -254,10 +251,10 @@ declareOrDefineFuns s numPreds bvType state sccs = do
         (toDefine, toDeclare) = partition canDefine sccs
     --Define the ith-bit functions for our constructor when we can
     --Otherwise, just declare them
-    forM toDeclare $ \scc
+    forM_ toDeclare $ \scc
       --TODO put back define case?
       -- putStrLn $ "Declaring SCC" ++ show (flattenSCC scc) ++ "for " ++ show f
-     -> do
+     ->
       case scc of
         AcyclicSCC expr@(Var _) -> do
           declareFun
@@ -275,7 +272,7 @@ declareOrDefineFuns s numPreds bvType state sccs = do
           return ()
     forM toDefine $ \scc
       -- putStrLn $ "Defining SCC" ++ show (flattenSCC scc) ++ "for " ++ show f
-     -> do
+     ->
       case scc of
         AcyclicSCC expr
           -- putStrLn $ "** Defining function for " ++ show expr
@@ -285,15 +282,15 @@ declareOrDefineFuns s numPreds bvType state sccs = do
                   e1 `Union` e2 ->
                     ((funFor e1) $$$ allArgs) \/ ((funFor e2) $$$ allArgs)
                   e1 `Intersect` e2 ->
-                    ((funFor e1) $$$ allArgs) /\ ((funFor e2) $$$ allArgs)
+                    (funFor e1 $$$ allArgs) /\ ((funFor e2) $$$ allArgs)
                   Neg e1 -> SMT.not ((funFor e1) $$$ allArgs)
                   FunApp g gargs
                     | vecFunName f == g ->
                       andAll $
-                      (flip map)
+                      map
+                      (\(setArg, inputArg) ->
+                        ithBit (bitFor setArg) inputArg numPreds)
                         (zip gargs allArgs)
-                        (\(setArg, inputArg) ->
-                           ithBit (bitFor setArg) inputArg numPreds)
                     | vecFunName f /= g -> SMT.bool False
                   Top -> SMT.bool True
                   Bottom -> SMT.bool False
@@ -311,13 +308,13 @@ declareDomain s numPreds bvType boolDomPreds boolDomArgName
   --Declare each of our existential variables 
   --Declare our domain function
   --We separate it into a quantified part and non quantified part
- = do
+ =
   SMT.defineFun
-    s
-    "domain"
-    (zip (nameToBitNames numPreds boolDomArgName) bvType)
-    SMT.tBool
-    boolDomPreds
+  s
+  "domain"
+  (zip (nameToBitNames numPreds boolDomArgName) bvType)
+  SMT.tBool
+  boolDomPreds
   -- SMT.declareFun s "functionDomain" bvType SMT.tBool
   --TODO split into separate functions
   -- let domainArgName = "arg-domain"
@@ -399,13 +396,13 @@ makePred s options (nonEmpty, initialCList)
   -- declareProdFuncions s numPreds bvType funs theMaxArity
   --Declare our existential variables
   putStrLn "Declaring existentials"
-  forM (existentialVars state) $ \v -> do
+  forM_ (existentialVars state) $ \v -> do
     declareVec s v bvType
     --Assert that each existential variable is in our domain
     SMT.assert s $ domain $$$ [nameToBits numPreds v]
   --Assert the properties of each existential variable
   putStrLn "Assert existential properties"
-  forM negPreds $ SMT.assert s
+  forM_ negPreds $ SMT.assert s
   --Assert our domain properties
   putStrLn "Asserting function domain properties"
   SMT.assert s funDomPreds
@@ -413,9 +410,9 @@ makePred s options (nonEmpty, initialCList)
   result <- SMT.check s
   --TODO minimize?
   case result of
-    SMT.Sat -> do
+    SMT.Sat ->
       printAndReturnResult s options numPreds bvType state funs allFreeVars
-    SMT.Unsat -> do
+    SMT.Unsat ->
       return $ Left clist --TODO niminize lemma
     SMT.Unknown -> error "Failed to solve quanitification"
 
@@ -431,17 +428,17 @@ printAndReturnResult ::
 printAndReturnResult s options numPreds bvType state funs allFreeVars
   -- SMT.command s $ SMT.List [SMT.Atom "get-model"]
  = do
-  case (getModel options) of
+  case getModel options of
     True -> do
       domain <- enumerateDomain s numPreds bvType
       putStrLn $ "DOMAIN: " ++ show domain
       prodsFrom <- enumerateProductions s bvType funs
         --TODO do based on options
-      forM prodsFrom $ \(from, f, to) ->
-        putStrLn $ show (from) ++ "  ->  " ++ show f ++ show to
-      forM allFreeVars $ \v -> do
+      forM_ prodsFrom $ \(from, f, to) ->
+        putStrLn $ show from ++ "  ->  " ++ show f ++ show to
+      forM_ allFreeVars $ \v -> do
         prods <- varProductions s v ((predNums state) Map.! v) numPreds
         forM prods $ \prod -> putStrLn $ varName v ++ "  ->  " ++ (show prod)
-      return ()
     False -> return ()
   return $ Right $ error "TODO " --() --TODO return solution
+ 

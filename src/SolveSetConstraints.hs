@@ -58,7 +58,7 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   SMT.simpleCommand s ["set-option", ":smt.mbqi", "true"]
   SMT.simpleCommand s ["push"]
   -- SMT.declareFun s "literalValue" litType SMT.tBool
-  forM literalNames $ \(SMT.Atom ln) -> SMT.declare s ln SMT.tBool
+  forM_ literalNames $ \(SMT.Atom ln) -> SMT.declare s ln SMT.tBool
   --Assert the SMT version of our expression
   SMT.assert s $ formulaForCExpr litFun c
   putStrLn $
@@ -67,10 +67,10 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
     " base literals, " ++ show (Set.size lits) ++ " literals total"
   putStrLn $
     "Partitioned into " ++
-    show (length litPartitions) ++ " subproblems: " ++ show (litPartitions)
+    show (length litPartitions) ++ " subproblems: " ++ show litPartitions
   -- forM [(e1, e2) | e1 <- exprList, e2 <- exprList] $
   --   uncurry subsetLemmaFor
-  putStrLn "Done asserting subset properties"
+  putStrLn "Done asserting subset properties" 
   -- assertTransitive
   putStrLn "Done asserting transitivity"
   solverLoop 0

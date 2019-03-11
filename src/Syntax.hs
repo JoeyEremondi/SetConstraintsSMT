@@ -1,8 +1,8 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE StandaloneDeriving #-}
+
 {-# LANGUAGE PatternSynonyms #-}
 
 module Syntax where
@@ -91,7 +91,7 @@ constrDepEdges clist = (allExprs, mergedPairs)
               , expr' == expr
               , subExpr <- subExprs
               ])
-        | (expr) <- allExprs
+        | expr <- allExprs
         ]
 
 isCycle (Graph.CyclicSCC _) = True
@@ -117,13 +117,13 @@ allExprNums sccList =
    in (Map.fromList exprPairs, length sccList)
 
 maxArity :: [Expr] -> Int
-maxArity es = List.maximum $ (0 :) $ Maybe.catMaybes $ List.map getArity es
+maxArity es = List.maximum $ (0 :) $ Maybe.mapMaybe getArity es
   where
     getArity (FunApp f x) = Just $ length x
     getArity _ = Nothing
 
 getArities :: [Expr] -> Map.Map String Int
-getArities exprs = Map.fromList $ Maybe.catMaybes $ map appPair exprs
+getArities exprs = Map.fromList $ Maybe.mapMaybe appPair exprs
   where
     appPair (FunApp f l) = Just (f, length l)
     appPair _ = Nothing

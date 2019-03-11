@@ -114,7 +114,7 @@ allExprNums :: [[Expr]] -> (Map.Map Expr Integer, Int)
 allExprNums sccList =
   let sccPairs = zip sccList [0 ..]
       exprPairs = [(e, num) | (elist, num) <- sccPairs, e <- elist]
-  in (Map.fromList exprPairs, length sccList)
+   in (Map.fromList exprPairs, length sccList)
 
 maxArity :: [Expr] -> Int
 maxArity es = List.maximum $ (0 :) $ Maybe.catMaybes $ List.map getArity es
@@ -178,17 +178,20 @@ withProjection freshName arity proj f =
       --This is necessary, since F(X1...Xk) is empty if any Xi is empty
       projEqConstr =
         (CSubset projVar Bottom) `CIff` (CSubset (projOf proj) Bottom)
-  in CAnd $ [result, projConstr, projEqConstr]
+   in CAnd $ [result, projConstr, projEqConstr]
 
 withProjectionLhs :: String -> Int -> Projection -> (Expr -> CExpr) -> CExpr
 withProjectionLhs freshName arity proj f =
-  let 
-      projVar = Var freshName
+  let projVar = Var freshName
       result = f projVar
-      topWithExpr = (replicate (-1 + projArgNum proj) Top) ++ [projVar] ++ (replicate (arity - projArgNum proj) Top)
+      topWithExpr =
+        (replicate (-1 + projArgNum proj) Top) ++
+        [projVar] ++ (replicate (arity - projArgNum proj) Top)
       --Assert that our expression is equal to the function applied to some fresh variables
-      projConstr = ((projOf proj) `Intersect` (FunApp (projFun proj) (replicate arity Top))) `sub` (FunApp (projFun proj) topWithExpr)
-  in CAnd $ [result, projConstr]
+      projConstr =
+        ((projOf proj) `Intersect` (FunApp (projFun proj) (replicate arity Top))) `sub`
+        (FunApp (projFun proj) topWithExpr)
+   in CAnd $ [result, projConstr]
 
 newtype Literal = Literal
   { unLiteral :: (Expr, Expr)
@@ -200,7 +203,7 @@ litRhs (Literal (_, e)) = e
 
 litFreeVars lit@(Literal (e1, e2)) =
   let ret = List.nub $ freeVars e1 ++ freeVars e2
-  in ret
+   in ret
 
 --Get the literals in a constraint expression
 literalsInCExpr :: CExpr -> Set.Set Literal

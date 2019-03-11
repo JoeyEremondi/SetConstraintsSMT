@@ -1,6 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveTraversable #-}
-
 {-# LANGUAGE FlexibleInstances #-}
 
 module SMTHelpers where
@@ -81,7 +80,7 @@ bvApply n vf args =
 -- bvMap :: Integral i => i -> Fun -> [BitVector] -> [SMT.SExpr]
 -- bvMap n f args = bvApplyHelper (replicate (fromIntegral n) f) (map unwrap args)
 bvApplyHelper fs [] = map ($$ []) fs
-bvApplyHelper fs args = map (\ x -> (\f x -> f $$ concat x) x args) fs
+bvApplyHelper fs args = map (\x -> (\f x -> f $$ concat x) x args) fs
 
 vecEq :: BitVector -> BitVector -> SMT.SExpr
 vecEq (BitVector b1) (BitVector b2) = andAll $ zipWith SMT.eq b1 b2

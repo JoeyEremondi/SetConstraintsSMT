@@ -171,7 +171,7 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
             (((Fun "literalValue") $$$ [BitVector arg1, BitVector arg2]) /\
              ((Fun "literalValue") $$$ [BitVector arg2, BitVector arg3])) ==>
             ((Fun "literalValue") $$$ [BitVector arg1, BitVector arg3])
-      in SMT.assert s $ forAll typePairs bodyCond
+       in SMT.assert s $ forAll typePairs bodyCond
     -- assertTransitive =
     --   forM
     --     [ (e1, e2, e3)

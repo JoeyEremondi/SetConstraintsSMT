@@ -37,8 +37,6 @@ getNumPreds = gets configNumPreds
 
 type ConfigM = State PredNumConfig
 
-
-
 getAllFunctions :: ConfigM [VecFun]
 getAllFunctions = gets (Map.elems . funVals)
 
@@ -52,8 +50,7 @@ p e x = do
 ithBit i (BitVector x) n = x List.!! (fromInteger i)
 
 forallVar :: ConfigM BitVector
-forallVar =
-  head <$> forallVars 1
+forallVar = head <$> forallVars 1
 
 forallVars :: Int -> ConfigM [BitVector]
 forallVars n = gets (take n . universalVars)
@@ -108,8 +105,7 @@ booleanDomainClause x e =
       pa <- p a x
       pb <- p b x
       return $ pe === (pa /\ pb)
-    Top ->
-      p e x
+    Top -> p e x
     Bottom -> do
       px <- p e x
       return $ SMT.not px
@@ -138,17 +134,17 @@ funClause f = do
 
 initialState numBits vars exprs connComps =
   let (predMap, numPreds) = allExprNums connComps
-  in Config
-     { predNums = predMap
-     , configNumPreds = numPreds
-     , funVals =
-         Map.fromList
-           [ (f, VecFun f (replicate ar [0 .. numBits - 1]))
-           | (f, ar) <- Map.toList $ getArities exprs
-           ]
-     , universalVars = vars
-     , existentialVars = []
-     }
+   in Config
+        { predNums = predMap
+        , configNumPreds = numPreds
+        , funVals =
+            Map.fromList
+              [ (f, VecFun f (replicate ar [0 .. numBits - 1]))
+              | (f, ar) <- Map.toList $ getArities exprs
+              ]
+        , universalVars = vars
+        , existentialVars = []
+        }
 
 fresh :: Integral i => i -> ConfigM BitVector
 fresh numPreds = do

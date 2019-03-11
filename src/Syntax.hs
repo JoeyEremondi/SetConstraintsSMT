@@ -1,8 +1,5 @@
-
 {-# LANGUAGE ScopedTypeVariables #-}
-
 {-# LANGUAGE FlexibleInstances #-}
-
 {-# LANGUAGE PatternSynonyms #-}
 
 module Syntax where

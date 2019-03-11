@@ -70,7 +70,7 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
     show (length litPartitions) ++ " subproblems: " ++ show litPartitions
   -- forM [(e1, e2) | e1 <- exprList, e2 <- exprList] $
   --   uncurry subsetLemmaFor
-  putStrLn "Done asserting subset properties" 
+  putStrLn "Done asserting subset properties"
   -- assertTransitive
   putStrLn "Done asserting transitivity"
   solverLoop 0

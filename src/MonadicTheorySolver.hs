@@ -1,8 +1,5 @@
-
 {-# LANGUAGE ScopedTypeVariables #-}
-
 {-# LANGUAGE FlexibleInstances #-}
-
 {-# LANGUAGE PatternSynonyms #-}
 
 module MonadicTheorySolver where
@@ -55,24 +52,24 @@ declareProdFuncions ::
      Integral i => SMT.Solver -> i -> [SExpr] -> [VecFun] -> Int -> IO ()
 declareProdFuncions s numPreds bvType funs maxArity =
   forM_ funs $ \f -> do
-  let prodFromName = "fromSymb"
-  let prodFrom = nameToBits numPreds prodFromName
-  let prodToNames =
-        map
-          (\i -> nameToBitNames numPreds $ "toSymb" ++ show i)
-          [0 .. (arity f) - 1]
-  let prodTos :: [BitVector] = map (BitVector . (map SMT.Atom)) prodToNames
-  let prodFromPairs = zip (nameToBitNames numPreds prodFromName) bvType
-  let prodToPairs = zip (concat prodToNames) (repeat SMT.tBool)
-  let fTos = BitVector [bitf $$$ prodTos | bitf <- funToBitFuns numPreds f]
-  let eqToFunRet = vecEq prodFrom fTos
-  let (allInDomain :: SExpr) = andAll $ map (\v -> domain $$$ [v]) prodTos
-  defineFun
-    s
-    (isFProduction f)
-    (prodFromPairs ++ prodToPairs)
-    SMT.tBool
-    (eqToFunRet /\ (domain $$$ [prodFrom]) /\ allInDomain)
+    let prodFromName = "fromSymb"
+    let prodFrom = nameToBits numPreds prodFromName
+    let prodToNames =
+          map
+            (\i -> nameToBitNames numPreds $ "toSymb" ++ show i)
+            [0 .. (arity f) - 1]
+    let prodTos :: [BitVector] = map (BitVector . (map SMT.Atom)) prodToNames
+    let prodFromPairs = zip (nameToBitNames numPreds prodFromName) bvType
+    let prodToPairs = zip (concat prodToNames) (repeat SMT.tBool)
+    let fTos = BitVector [bitf $$$ prodTos | bitf <- funToBitFuns numPreds f]
+    let eqToFunRet = vecEq prodFrom fTos
+    let (allInDomain :: SExpr) = andAll $ map (\v -> domain $$$ [v]) prodTos
+    defineFun
+      s
+      (isFProduction f)
+      (prodFromPairs ++ prodToPairs)
+      SMT.tBool
+      (eqToFunRet /\ (domain $$$ [prodFrom]) /\ allInDomain)
   -- forM [0 .. maxArity - 1] $ \argNum -> do
   --   SMT.declareFun s (productionFor argNum) [bvType] bvType
   -- return ()
@@ -288,8 +285,8 @@ declareOrDefineFuns s numPreds bvType state sccs = do
                     | vecFunName f == g ->
                       andAll $
                       map
-                      (\(setArg, inputArg) ->
-                        ithBit (bitFor setArg) inputArg numPreds)
+                        (\(setArg, inputArg) ->
+                           ithBit (bitFor setArg) inputArg numPreds)
                         (zip gargs allArgs)
                     | vecFunName f /= g -> SMT.bool False
                   Top -> SMT.bool True
@@ -310,11 +307,11 @@ declareDomain s numPreds bvType boolDomPreds boolDomArgName
   --We separate it into a quantified part and non quantified part
  =
   SMT.defineFun
-  s
-  "domain"
-  (zip (nameToBitNames numPreds boolDomArgName) bvType)
-  SMT.tBool
-  boolDomPreds
+    s
+    "domain"
+    (zip (nameToBitNames numPreds boolDomArgName) bvType)
+    SMT.tBool
+    boolDomPreds
   -- SMT.declareFun s "functionDomain" bvType SMT.tBool
   --TODO split into separate functions
   -- let domainArgName = "arg-domain"
@@ -412,8 +409,7 @@ makePred s options (nonEmpty, initialCList)
   case result of
     SMT.Sat ->
       printAndReturnResult s options numPreds bvType state funs allFreeVars
-    SMT.Unsat ->
-      return $ Left clist --TODO niminize lemma
+    SMT.Unsat -> return $ Left clist --TODO niminize lemma
     SMT.Unknown -> error "Failed to solve quanitification"
 
 printAndReturnResult ::
@@ -441,4 +437,3 @@ printAndReturnResult s options numPreds bvType state funs allFreeVars
         forM prods $ \prod -> putStrLn $ varName v ++ "  ->  " ++ (show prod)
     False -> return ()
   return $ Right $ error "TODO " --() --TODO return solution
- 

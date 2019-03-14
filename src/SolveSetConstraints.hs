@@ -74,6 +74,9 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   -- assertTransitive
   putStrLn "Done asserting transitivity"
   result <- Solver.makePred s options litFun (Set.toList lits)
+  case result of 
+    (Left r) -> putStrLn "Could not find solution to constraints"
+    (Right r) -> putStrLn "Found Solution"
   return ()
     -- exprSubset lhs rhs = (Fun "literalValue") $$$ [exprFun lhs, exprFun rhs]
   where

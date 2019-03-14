@@ -111,18 +111,18 @@ booleanDomainClause x e =
       return $ SMT.not px
     _ -> return $ SMT.bool True
 
-posConstrClause :: BitVector -> Constr -> ConfigM SMT.SExpr
-posConstrClause x (e1 `Sub` e2) = do
+posConstrClause :: (Literal -> SMT.SExpr) -> BitVector -> Literal -> ConfigM SMT.SExpr
+posConstrClause litVarFor x l@(Literal (e1, e2)) = do
   pe1 <- p e1 x
   pe2 <- p e2 x
-  return $ pe1 ==> pe2
+  return $ (litVarFor l ==> (pe1 ==> pe2))
 
-negConstrClause :: Integral i => i -> Constr -> ConfigM SMT.SExpr
-negConstrClause numPreds (e1 `NotSub` e2) = do
+negConstrClause :: Integral i => (Literal -> SMT.SExpr) -> i -> Literal -> ConfigM SMT.SExpr
+negConstrClause litVarFor numPreds l@(Literal (e1, e2)) = do
   x <- fresh numPreds
   pe1 <- p e1 x
   pe2 <- p e2 x
-  return $ pe1 /\ (SMT.not pe2)
+  return $ (SMT.not  $ litVarFor l) ==> (pe1 /\ (SMT.not pe2))
 
 --Assert that the given function is closed over the domain
 funClause :: VecFun -> ConfigM SMT.SExpr

@@ -323,31 +323,32 @@ declareDomain s numPreds bvType boolDomPreds boolDomArgName
   --   SMT.tBool $
   --   (booleanDomain $$$ [domainArg]) /\ (funDomain $$$ [domainArg])
 
-equalityClasses :: [Constr] -> [Expr] -> [SCC Expr]
-equalityClasses constrs exprs = sortedSCCs
-  where
-    edges =
-      [(e1, e1, List.nub [e2 | Sub e e2 <- constrs, e == e1]) | e1 <- exprs]
-    sortWithinSCC (AcyclicSCC e) = AcyclicSCC e
-    sortWithinSCC (CyclicSCC l) = CyclicSCC $ sortWith exprInt l
-    theSCCs = map AcyclicSCC exprs --stronglyConnComp edges
-    sortedSCCs = sortWith sccInt $ map sortWithinSCC $ theSCCs
-    exprMap = Map.fromList $ zip exprs [0 ..]
-    exprInt = (exprMap Map.!)
-    sccInt = (exprInt . head . flattenSCC)
+--TODO: make this work with single-SAT solver?
+-- equalityClasses :: [Constr] -> [Expr] -> [SCC Expr]
+-- equalityClasses constrs exprs = sortedSCCs
+--   where
+--     edges =
+--       [(e1, e1, List.nub [e2 | Sub e e2 <- constrs, e == e1]) | e1 <- exprs]
+--     sortWithinSCC (AcyclicSCC e) = AcyclicSCC e
+--     sortWithinSCC (CyclicSCC l) = CyclicSCC $ sortWith exprInt l
+--     theSCCs = map AcyclicSCC exprs --stronglyConnComp edges
+--     sortedSCCs = sortWith sccInt $ map sortWithinSCC $ theSCCs
+--     exprMap = Map.fromList $ zip exprs [0 ..]
+--     exprInt = (exprMap Map.!)
+--     sccInt = (exprInt . head . flattenSCC)
 
 --TODO include constratailint stuff
 makePred ::
      SMT.Solver
   -> Options
-  -> (Expr, [Constr])
+  -> (Literal -> SMT.SExpr)
+  -> [Literal]
   -> IO (Either [Constr] TreeGrammar) --TODO return solution
-makePred s options (nonEmpty, initialCList)
+makePred s options litVarFor litList
   --setOptions s
  = do
-  let clist = (nonEmpty `NotSub` Bottom) : initialCList
-      subExprs = orderedSubExpressions clist
-      (posList, negList) = List.partition isPos clist
+  let subExprs = orderedSubExpressions litList
+      -- (posList, negList) = List.partition isPos clist
       theMaxArity = maxArity subExprs
       numForall = 2 + theMaxArity
       -- constrNums = allExprNums subExprs
@@ -359,14 +360,14 @@ makePred s options (nonEmpty, initialCList)
       allFreeVars :: [Expr] = filter isVar subExprs
       boolDomArgName = "z_boolDomain"
       boolDomArg = nameToBits numPreds boolDomArgName
-      eqClasses = equalityClasses clist subExprs
-      numPreds = length eqClasses
+      eqClasses = map AcyclicSCC  subExprs -- equalityClasses clist subExprs --TODO: bring this back?
+      numPreds =  length eqClasses
   putStrLn $ "In theory solver, numBits: " ++ show numPreds
-  putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
+  -- putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
   let comp = do
         boolDomPredList <- forM subExprs (booleanDomainClause boolDomArg)
-        posConstrPreds <- forM posList (posConstrClause boolDomArg)
-        negConstrPreds <- forM negList (negConstrClause numPreds)
+        posConstrPreds <- forM litList (posConstrClause litVarFor boolDomArg)
+        negConstrPreds <- forM litList (negConstrClause litVarFor numPreds)
         funDomPreds <-
           withNForalls vars (toInteger $ length subExprs) $ \vars
             --TODO only do clauses for undefined function vars
@@ -409,7 +410,7 @@ makePred s options (nonEmpty, initialCList)
   case result of
     SMT.Sat ->
       printAndReturnResult s options numPreds bvType state funs allFreeVars
-    SMT.Unsat -> return $ Left clist --TODO niminize lemma
+    SMT.Unsat -> return $ Left [] --TODO put something useful here
     SMT.Unknown -> error "Failed to solve quanitification"
 
 printAndReturnResult ::

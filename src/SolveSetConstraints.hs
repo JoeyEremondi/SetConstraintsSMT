@@ -16,12 +16,12 @@ import Data.Either (rights)
 import Data.Graph
 import Data.Tree (flatten)
 import Data.Tuple (swap)
-import Debug.Trace (trace)
+import Debug.Trace (trace) 
 
 formulaForCExpr :: (Literal -> SMT.SExpr) -> CExpr -> SMT.SExpr
-formulaForCExpr litNum cexp =
+formulaForCExpr litIdentifierFor cexp =
   case cexp of
-    (s1 `CSubset` s2) -> litNum $ Literal (s1, s2)
+    (s1 `CSubset` s2) -> litIdentifierFor $ Literal (s1, s2)
     (CAnd cexprs) -> andAll $ map self cexprs
     (COr cexprs) -> orAll $ map self cexprs
     (c1 `CImplies` c2) -> self c1 ==> self c2
@@ -29,10 +29,10 @@ formulaForCExpr litNum cexp =
     (CXor cexprs) -> error "TODO XOR" --"xor" $$ [self c1, self c2]
     (CNot c1) -> SMT.not $ self c1
   where
-    self = formulaForCExpr litNum
+    self = formulaForCExpr litIdentifierFor
 
 makeLemma :: (Literal -> SMT.SExpr) -> [Constr] -> SMT.SExpr
-makeLemma litNum clist = SMT.not $ andAll $ map helper clist
+makeLemma litNum clist = SMT.not $ andAll $ map helper clist 
   where
     helper c =
       case c of
@@ -60,7 +60,7 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   -- SMT.declareFun s "literalValue" litType SMT.tBool
   forM_ literalNames $ \(SMT.Atom ln) -> SMT.declare s ln SMT.tBool
   --Assert the SMT version of our expression
-  SMT.assert s $ formulaForCExpr litFun c
+  SMT.assert s $ formulaForCExpr litFun cComplete
   putStrLn $
     "Done asserting formula, " ++
     show (Set.size baseLits) ++
@@ -73,7 +73,8 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   putStrLn "Done asserting subset properties"
   -- assertTransitive
   putStrLn "Done asserting transitivity"
-  solverLoop 0
+  result <- Solver.makePred s options litFun (Set.toList lits)
+  return ()
     -- exprSubset lhs rhs = (Fun "literalValue") $$$ [exprFun lhs, exprFun rhs]
   where
     nonEmptyConstr = CNot (CSubset nonEmptyExpr Bottom)
@@ -95,7 +96,7 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
       where
         transConstr e1 e2 e3 =
           (CAnd [CSubset e1 e2, CSubset e2 e3]) `CImplies` (CSubset e1 e3)
-    c = CAnd [cInter, cTransitive] --TODO add more
+    cComplete = CAnd [cInter, cTransitive] --TODO add more
     literalNames =
       map (\i -> SMT.Atom $ "literal_" ++ show i) [0 .. length lits - 1]
     baseLits = literalsInCExpr cBase
@@ -121,43 +122,43 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
     exprList = Set.toList exprs
     -- exprMap = Map.fromList $ zip (exprList) [0 ..]
     -- exprFun = (intToBits numBits) . (exprMap Map.!)
-    solverLoop i = do
-      putStrLn $ "SolverLoop" ++ show i
-      result <- SMT.check s
-      case result of
-        SMT.Unsat -> putStrLn $ "UNSAT in " ++ show i ++ " theory iterations"
-        SMT.Unknown -> error "Shouldn't have quantifiers in solver loop"
-        SMT.Sat -> do
-          putStrLn "Solver loop SAT, trying theory solver"
-          model <- SMT.command s $ SMT.List [SMT.Atom "get-model"]
-          allLitAssigns <-
-            forM litPartitions $ \part ->
-              forM part $ \lit@(Literal (lhs, rhs)) -> do
-                result <- SMT.getExpr s $ litFun lit
-                let resultBool =
-                      case result of
-                        SMT.Bool b -> b
-                        SMT.Bits _ v -> v == 1
-                        x ->
-                          error $
-                          "Got bad boolean back from function: " ++ show x
-                case resultBool of
-                  True -> return $ lhs `Sub` rhs
-                  False -> return $ lhs `NotSub` rhs
-          --Iterate through our partitions until one fails, or all succeed
-          findResults i allLitAssigns
-    findResults i [] =
-      putStrLn $ "SAT in " ++ show (i + 1) ++ " theory iterations"
-    findResults i (litAssigns:rest) = do
-      SMT.simpleCommand s ["push"]
-      result <- Solver.makePred s options (nonEmptyExpr, litAssigns) --TODO make better name
-      SMT.simpleCommand s ["pop"]
-      case result of
-        Left lemma -> do
-          SMT.assert s $ makeLemma litFun lemma
-          solverLoop (i + 1)
-        Right _ -> findResults i rest
-      return ()
+    -- solverLoop i = do
+    --   putStrLn $ "SolverLoop" ++ show i
+    --   result <- SMT.check s
+    --   case result of
+    --     SMT.Unsat -> putStrLn $ "UNSAT in " ++ show i ++ " theory iterations"
+    --     SMT.Unknown -> error "Shouldn't have quantifiers in solver loop"
+    --     SMT.Sat -> do
+    --       putStrLn "Solver loop SAT, trying theory solver"
+    --       model <- SMT.command s $ SMT.List [SMT.Atom "get-model"]
+    --       allLitAssigns <-
+    --         forM litPartitions $ \part ->
+    --           forM part $ \lit@(Literal (lhs, rhs)) -> do
+    --             result <- SMT.getExpr s $ litFun lit
+    --             let resultBool =
+    --                   case result of
+    --                     SMT.Bool b -> b
+    --                     SMT.Bits _ v -> v == 1
+    --                     x ->
+    --                       error $
+    --                       "Got bad boolean back from function: " ++ show x
+    --             case resultBool of
+    --               True -> return $ lhs `Sub` rhs
+    --               False -> return $ lhs `NotSub` rhs
+    --       --Iterate through our partitions until one fails, or all succeed
+    --       findResults i allLitAssigns
+    -- findResults i [] =
+    --   putStrLn $ "SAT in " ++ show (i + 1) ++ " theory iterations"
+    -- findResults i (litAssigns:rest) = do
+    --   SMT.simpleCommand s ["push"]
+    --   result <- Solver.makePred s options litFun (nonEmptyExpr, litAssigns) --TODO make better name
+    --   SMT.simpleCommand s ["pop"]
+    --   case result of
+    --     Left lemma -> do
+    --       SMT.assert s $ makeLemma litFun lemma
+    --       solverLoop (i + 1)
+    --     Right _ -> findResults i rest
+    --   return ()
     assertTransitive =
       let bitNames = map (\i -> "bit_" ++ show i) [0 .. numBits - 1]
           [arg1names, arg2names, arg3names] =

@@ -72,12 +72,10 @@ varName (Var v) = v
 
 type SubExprs = [Expr]
 
-constrDepEdges :: [Constr] -> ([Expr], [(Expr, [Expr])])
-constrDepEdges clist = (allExprs, mergedPairs)
+constrDepEdges :: [Literal] -> ([Expr], [(Expr, [Expr])])
+constrDepEdges litList = (allExprs, mergedPairs)
   where
-    sides (Sub x y) = [x, y]
-    sides (NotSub x y) = [x, y]
-    rawPairs = [edge | c <- clist, e <- sides c, edge <- exprDepEdges e]
+    rawPairs = [edge | Literal (e1, e2) <- litList, e <- [e1, e2], edge <- exprDepEdges e]
     allExprs = List.nub $ map fst rawPairs
     mergedPairs =
       List.nub
@@ -94,13 +92,13 @@ constrDepEdges clist = (allExprs, mergedPairs)
 isCycle (Graph.CyclicSCC _) = True
 isCycle _ = False
 
-orderedSubExpressions :: [Constr] -> [Expr]
-orderedSubExpressions clist =
+orderedSubExpressions :: [Literal] -> [Expr]
+orderedSubExpressions litList =
   if (length topologicalOrder == length allExprs)
     then map ((\(x, _, _) -> x) . unVertex) $ reverse $ topologicalOrder
     else error "Graph is not acyclic"
   where
-    (allExprs, pairs) = constrDepEdges clist
+    (allExprs, pairs) = constrDepEdges litList
     rawExprNums = Map.fromList $ zip allExprs [0 ..]
     exprNum = (rawExprNums Map.!)
     edges = map (\(e, es) -> (e, exprNum e, map exprNum es)) pairs

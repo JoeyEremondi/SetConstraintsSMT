@@ -353,8 +353,8 @@ makePred s options litVarFor litList
       -- constrNums = allExprNums subExprs
       bvType = makeBvType numPreds
       vars =
-        map (\i -> nameToBits numPreds $ "y_univ_" ++ show i) [1 .. numForall]
-      state0 = (initialState numPreds vars subExprs $ map flattenSCC eqClasses) 
+        map (\i -> nameToBits numPreds $ "y_univ_" ++ show i) [1 .. numForall] 
+      state0 = (initialState numPreds vars (Maybe.mapMaybe toPredExpr subExprs) $ map flattenSCC eqClasses) 
       funs :: [VecFun] = Map.elems $ funVals state0
       allFreeVars :: [PredExpr] = filter isVar $ Maybe.catMaybes $ map toPredExpr subExprs  
       boolDomArgName = "z_boolDomain"

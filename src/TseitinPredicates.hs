@@ -25,7 +25,7 @@ funDomain = Fun "functionDomain"
 
 -- type SBVec = SMT.BitVec
 data PredNumConfig = Config
-  { predNums :: Map.Map Expr Integer
+  { predNums :: Map.Map PredExpr Integer
   , configNumPreds :: Int
   , funVals :: Map.Map String VecFun
   , universalVars :: [BitVector]
@@ -40,12 +40,23 @@ type ConfigM = State PredNumConfig
 getAllFunctions :: ConfigM [VecFun]
 getAllFunctions = gets (Map.elems . funVals)
 
+--Generate a function that takes a bit-vector x
+--and returns the SMT expression representing P_e(x)
+--
+pSMT :: PredNumConfig -> Expr -> BitVector -> SMT.SExpr
+pSMT config e = 
+  case e of
+    e -> _
+
 p :: Expr -> BitVector -> ConfigM SMT.SExpr
-p e x = do
-  n <- getNumPreds
-  i <- gets ((Map.! e) . predNums)
-    -- let xi = SMT.extract x (toInteger i) (toInteger i)
-  return $ ithBit i x n
+p e x = 
+  case e of
+    e -> _ 
+-- p e x = do
+--   n <- getNumPreds
+--   i <- gets ((Map.! e) . predNums)
+--     -- let xi = SMT.extract x (toInteger i) (toInteger i)
+--   return $ ithBit i x n
 
 ithBit i (BitVector x) n = x List.!! (fromInteger i)
 
@@ -140,7 +151,7 @@ initialState numBits vars exprs connComps =
         , funVals =
             Map.fromList
               [ (f, VecFun f (replicate ar [0 .. numBits - 1]))
-              | (f, ar) <- Map.toList $ getArities exprs
+              | (f, ar) <- Map.toList $ getArities  exprs 
               ]
         , universalVars = vars
         , existentialVars = []

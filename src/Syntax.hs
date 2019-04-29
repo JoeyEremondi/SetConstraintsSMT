@@ -30,12 +30,22 @@ data Expr
   | Bottom
   deriving (Eq, Ord, Show, Read)
 
+data PredExpr = 
+  PVar String
+  | PFunApp String [Expr]
+  deriving (Eq, Ord, Show, Read)
+
 data Constr
   = Sub Expr
         Expr
   | NotSub Expr
            Expr
   deriving (Eq, Ord, Show, Read)
+
+toPredExpr :: Expr -> Maybe PredExpr
+toPredExpr (Var v) = Just (PVar v)
+toPredExpr (FunApp s es) = Just (PFunApp s es)
+toPredExpr _ = Nothing 
 
 isPos :: Constr -> Bool
 isPos (Sub _ _) = True
@@ -64,11 +74,11 @@ children (FunApp f es) = es
 children Top = []
 children Bottom = []
 
-isVar (Var v) = True
+isVar (PVar v) = True
 isVar _ = False
 
-varName :: Expr -> String
-varName (Var v) = v
+varName :: PredExpr -> String
+varName (PVar v) = v
 
 type SubExprs = [Expr]
 
@@ -105,10 +115,10 @@ orderedSubExpressions litList =
     (g, unVertex, unKey) = Graph.graphFromEdges edges
     topologicalOrder = Graph.topSort g
 
-allExprNums :: [[Expr]] -> (Map.Map Expr Integer, Int)
+allExprNums :: [[Expr]] -> (Map.Map PredExpr Integer, Int)
 allExprNums sccList =
   let sccPairs = zip sccList [0 ..]
-      exprPairs = [(e, num) | (elist, num) <- sccPairs, e <- elist]
+      exprPairs = [(pe, num) | (elist, num) <- sccPairs, e <- elist, Just pe <- [toPredExpr e]]
    in (Map.fromList exprPairs, length sccList)
 
 maxArity :: [Expr] -> Int
@@ -117,10 +127,10 @@ maxArity es = List.maximum $ (0 :) $ Maybe.mapMaybe getArity es
     getArity (FunApp f x) = Just $ length x
     getArity _ = Nothing
 
-getArities :: [Expr] -> Map.Map String Int
+getArities :: [PredExpr] -> Map.Map String Int
 getArities exprs = Map.fromList $ Maybe.mapMaybe appPair exprs
   where
-    appPair (FunApp f l) = Just (f, length l)
+    appPair (PFunApp f l) = Just (f, length l)
     appPair _ = Nothing
 
 constrNot :: Constr -> Constr

@@ -196,7 +196,7 @@ enumerateProductions s bvType funs
     --     SMT.Unsat -> return accum
     --     _ -> error "TODO Failed quant"
 
-varProductions :: SMT.Solver -> Expr -> Integer -> Int -> IO [BitVector]
+varProductions :: SMT.Solver -> PredExpr -> Integer -> Int -> IO [BitVector]
 varProductions s v i n = do
   SMT.simpleCommand s ["push"]
   declareVec s vname $ makeBvType n
@@ -224,7 +224,7 @@ declareOrDefineFuns ::
   -> t
   -> [SExpr]
   -> PredNumConfig
-  -> [SCC Expr]
+  -> [SCC PredExpr]
   -> IO [[()]]
 declareOrDefineFuns s numPreds bvType state sccs = do
   let funs = Map.elems $ funVals state
@@ -234,7 +234,7 @@ declareOrDefineFuns s numPreds bvType state sccs = do
     let allArgs =
           map (\arg -> nameToBits numPreds $ ("f-arg-" ++ show arg)) allArgNums
     let funBitNames = funToBitFuns numPreds f
-    let bitFor expr = (predNums state) Map.! expr
+    let bitFor expr =  (predNums state) Map.! expr
     let funFor e =
           case fromIntegral i < length funBitNames of
             True -> (funBitNames List.!! (fromIntegral i))
@@ -242,7 +242,7 @@ declareOrDefineFuns s numPreds bvType state sccs = do
             i = bitFor e
     let canDefine scc =
           case scc of
-            AcyclicSCC (Var _) -> False
+            AcyclicSCC (PVar _) -> False
             AcyclicSCC _ -> True
             CyclicSCC _ -> False --TODO check for self-reference
         (toDefine, toDeclare) = partition canDefine sccs
@@ -253,7 +253,7 @@ declareOrDefineFuns s numPreds bvType state sccs = do
       -- putStrLn $ "Declaring SCC" ++ show (flattenSCC scc) ++ "for " ++ show f
      ->
       case scc of
-        AcyclicSCC expr@(Var _) -> do
+        AcyclicSCC expr@(PVar v) -> do
           declareFun
             s
             (funFor expr)
@@ -274,23 +274,22 @@ declareOrDefineFuns s numPreds bvType state sccs = do
         AcyclicSCC expr
           -- putStrLn $ "** Defining function for " ++ show expr
          -> do
+          let (PFunApp g gargs) = expr
           let funBody =
-                case expr of
-                  e1 `Union` e2 ->
-                    ((funFor e1) $$$ allArgs) \/ ((funFor e2) $$$ allArgs)
-                  e1 `Intersect` e2 ->
-                    (funFor e1 $$$ allArgs) /\ ((funFor e2) $$$ allArgs)
-                  Neg e1 -> SMT.not ((funFor e1) $$$ allArgs)
-                  FunApp g gargs
-                    | vecFunName f == g ->
+                case vecFunName f == g of
+                  -- e1 `Union` e2 ->
+                  --   ((funFor e1) $$$ allArgs) \/ ((funFor e2) $$$ allArgs)
+                  -- e1 `Intersect` e2 ->
+                  --   (funFor e1 $$$ allArgs) /\ ((funFor e2) $$$ allArgs)
+                  -- Neg e1 -> SMT.not ((funFor e1) $$$ allArgs)
+                  True ->
                       andAll $
                       map
-                        (\(setArg, inputArg) ->
-                           ithBit (bitFor setArg) inputArg numPreds)
+                        (\(setArg, argVal) -> pSMT state setArg argVal)
                         (zip gargs allArgs)
-                    | vecFunName f /= g -> SMT.bool False
-                  Top -> SMT.bool True
-                  Bottom -> SMT.bool False
+                  False -> SMT.bool False
+                  -- Top -> SMT.bool True
+                  -- Bottom -> SMT.bool False
           let argPairs =
                 concatMap
                   (\argName ->
@@ -355,12 +354,12 @@ makePred s options litVarFor litList
       bvType = makeBvType numPreds
       vars =
         map (\i -> nameToBits numPreds $ "y_univ_" ++ show i) [1 .. numForall]
-      state0 = (initialState numPreds vars subExprs $ map flattenSCC eqClasses)
+      state0 = (initialState numPreds vars subExprs $ map flattenSCC eqClasses) 
       funs :: [VecFun] = Map.elems $ funVals state0
-      allFreeVars :: [Expr] = filter isVar subExprs
+      allFreeVars :: [PredExpr] = filter isVar $ Maybe.catMaybes $ map toPredExpr subExprs  
       boolDomArgName = "z_boolDomain"
       boolDomArg = nameToBits numPreds boolDomArgName
-      eqClasses = map AcyclicSCC  subExprs -- equalityClasses clist subExprs --TODO: bring this back?
+      eqClasses = map AcyclicSCC  $ Maybe.catMaybes $ map toPredExpr subExprs -- equalityClasses clist subExprs --TODO: bring this back?
       numPreds =  length eqClasses
   putStrLn $ "In theory solver, numBits: " ++ show numPreds
   -- putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
@@ -420,7 +419,7 @@ printAndReturnResult ::
   -> [SExpr]
   -> PredNumConfig
   -> [VecFun]
-  -> [Expr]
+  -> [PredExpr]
   -> IO (Either a b)
 printAndReturnResult s options numPreds bvType state funs allFreeVars
   -- SMT.command s $ SMT.List [SMT.Atom "get-model"]

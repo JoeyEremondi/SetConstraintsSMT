@@ -44,14 +44,24 @@ getAllFunctions = gets (Map.elems . funVals)
 --and returns the SMT expression representing P_e(x)
 --
 pSMT :: PredNumConfig -> Expr -> BitVector -> SMT.SExpr
-pSMT config e = 
+pSMT config e x = 
   case e of
-    e -> _
+    (Var e) ->
+      let i = (predNums config) Map.! (PVar e)
+      in ithBit i x (configNumPreds config)
+    (FunApp e1 e2) -> 
+      let i = (predNums config) Map.! (PFunApp e1 e2)
+      in ithBit i x (configNumPreds config)
+    (Union e1 e2) -> (pSMT config e1 x) /\ (pSMT config e2 x)
+    (Intersect e1 e2) -> (pSMT config e1 x) \/ (pSMT config e2 x)
+    (Neg e) -> SMT.not (pSMT config e x)
+    Top -> SMT.bool True
+    Bottom -> SMT.bool False
 
 p :: Expr -> BitVector -> ConfigM SMT.SExpr
-p e x = 
-  case e of
-    e -> _ 
+p e x = do
+  config <- get
+  return $ pSMT config e x 
 -- p e x = do
 --   n <- getNumPreds
 --   i <- gets ((Map.! e) . predNums)

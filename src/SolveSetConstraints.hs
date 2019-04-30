@@ -53,29 +53,33 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   --Declare our inclusion function
   --
  = do
-  putStrLn $ "cInitial: " ++ show cInitial
+  let log = if (verbose options) then putStrLn else (\ _ -> return ())
+  log $ "cInitial: " ++ show cInitial
   SMT.simpleCommand s ["set-logic", "UF"]
   SMT.simpleCommand s ["set-option", ":smt.mbqi", "true"]
+  when (verbose options) $ SMT.simpleCommand s ["set-option", ":produce-unsat-cores", "true"]
   SMT.simpleCommand s ["push"]
   -- SMT.declareFun s "literalValue" litType SMT.tBool
   forM_ literalNames $ \(SMT.Atom ln) -> SMT.declare s ln SMT.tBool
   --Assert the SMT version of our expression
   SMT.assert s $ formulaForCExpr litFun cComplete
-  putStrLn $
+  log $
     "Done asserting formula, " ++
     show (Set.size baseLits) ++
     " base literals, " ++ show (Set.size lits) ++ " literals total"
-  putStrLn $
+  log $
     "Partitioned into " ++
     show (length litPartitions) ++ " subproblems: " ++ show litPartitions
   -- forM [(e1, e2) | e1 <- exprList, e2 <- exprList] $
   --   uncurry subsetLemmaFor
-  putStrLn "Done asserting subset properties"
+  log "Done asserting subset properties"
   -- assertTransitive
-  putStrLn "Done asserting transitivity"
+  log "Done asserting transitivity"
   result <- Solver.makePred s options litFun (Set.toList lits)
   case result of 
-    (Left r) -> putStrLn "Could not find solution to constraints"
+    (Left r) -> do
+      when (verbose options) (SMT.simpleCommand s ["get-unsat-core"]) 
+      putStrLn "Could not find solution to constraints"
     (Right r) -> putStrLn "Found Solution"
   return ()
     -- exprSubset lhs rhs = (Fun "literalValue") $$$ [exprFun lhs, exprFun rhs]

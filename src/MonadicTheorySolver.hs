@@ -9,6 +9,7 @@ import Syntax
 import TseitinPredicates
 
 import Control.Monad.State
+import Control.Monad (when)
 import qualified Data.Data as Data
 import Data.List as List
 import qualified Data.Map as Map
@@ -346,6 +347,7 @@ makePred ::
 makePred s options litVarFor litList
   --setOptions s
  = do
+  let log = if (verbose options) then putStrLn else (\ _ -> return ())
   let subExprs = orderedSubExpressions litList
       -- (posList, negList) = List.partition isPos clist
       theMaxArity = maxArity subExprs
@@ -354,14 +356,17 @@ makePred s options litVarFor litList
       bvType = makeBvType numPreds
       vars =
         map (\i -> nameToBits numPreds $ "y_univ_" ++ show i) [1 .. numForall] 
-      state0 = (initialState numPreds vars (Maybe.mapMaybe toPredExpr subExprs) $ map flattenSCC eqClasses) 
+      state0 = (initialState numPreds vars (Maybe.mapMaybe toPredExpr subExprs) $ map flattenSCC eqClasses)
+      
       funs :: [VecFun] = Map.elems $ funVals state0
       allFreeVars :: [PredExpr] = filter isVar $ Maybe.catMaybes $ map toPredExpr subExprs  
       boolDomArgName = "z_boolDomain"
       boolDomArg = nameToBits numPreds boolDomArgName
       eqClasses = map AcyclicSCC  $ Maybe.catMaybes $ map toPredExpr subExprs -- equalityClasses clist subExprs --TODO: bring this back?
       numPreds =  length eqClasses
-  putStrLn $ "In theory solver, numBits: " ++ show numPreds
+  log ("Lit Vars: " ++ show [(l, litVarFor l) | l <- litList]) 
+  log ("Pred numbers: " ++ show (predNums state0))
+  log $ "In theory solver, numBits: " ++ show numPreds
   -- putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
   let comp = do
         boolDomPredList <- forM subExprs (booleanDomainClause boolDomArg)
@@ -384,26 +389,26 @@ makePred s options litVarFor litList
           , negConstrPreds)
   let ((funDomPreds, boolDomPreds, negPreds), state) = runState comp state0
   --Declare our domain function and its subfunctions
-  putStrLn "Declaring domain"
+  log "Declaring domain"
   declareDomain s numPreds bvType boolDomPreds boolDomArgName
   --Declare or define the functions for each constructor in our Herbrand universe
-  putStrLn "Declaring constructors"
+  log "Declaring constructors"
   declareOrDefineFuns s numPreds bvType state eqClasses
   --Declare functions that determines if a production is valid
   -- declareProdFuncions s numPreds bvType funs theMaxArity
   --Declare our existential variables
-  putStrLn "Declaring existentials"
+  log "Declaring existentials"
   forM_ (existentialVars state) $ \v -> do
     declareVec s v bvType
     --Assert that each existential variable is in our domain
     SMT.assert s $ domain $$$ [nameToBits numPreds v]
   --Assert the properties of each existential variable
-  putStrLn "Assert existential properties"
+  log "Assert existential properties"
   forM_ negPreds $ SMT.assert s
   --Assert our domain properties
-  putStrLn "Asserting function domain properties"
+  log "Asserting function domain properties"
   SMT.assert s funDomPreds
-  putStrLn "About do check SAT"
+  log "About do check SAT"
   result <- SMT.check s
   --TODO minimize?
   case result of

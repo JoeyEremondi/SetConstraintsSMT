@@ -52,8 +52,8 @@ pSMT config e x =
     (FunApp e1 e2) -> 
       let i = (predNums config) Map.! (PFunApp e1 e2)
       in ithBit i x (configNumPreds config)
-    (Union e1 e2) -> (pSMT config e1 x) /\ (pSMT config e2 x)
-    (Intersect e1 e2) -> (pSMT config e1 x) \/ (pSMT config e2 x)
+    (Union e1 e2) -> (pSMT config e1 x) \/ (pSMT config e2 x)
+    (Intersect e1 e2) -> (pSMT config e1 x) /\ (pSMT config e2 x)
     (Neg e) -> SMT.not (pSMT config e x)
     Top -> SMT.bool True
     Bottom -> SMT.bool False

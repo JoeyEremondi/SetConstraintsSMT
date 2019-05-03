@@ -17,13 +17,13 @@ library
   hs-source-dirs:      src
   exposed-modules: SetConstraints.Solve
   other-modules:     Syntax, SMTHelpers, TseitinPredicates, MonadicTheorySolver, SolveSetConstraints, TreeGrammar, ArgParse, Andersen
-  build-depends:       base >= 4.12 && < 5,
-                       simple-smt >= 0.9.4,
-                       mtl == 2.2.2,
-                       containers == 0.6.0.1,
-                       optparse-applicative >= 0.14.3.0,
-                       parsec == 3.1.13.0,
-                       hashable == 1.2.7.0
+  build-depends:       base,
+                       simple-smt,
+                       mtl,
+                       containers,
+                       optparse-applicative,
+                       parsec,
+                       hashable
   default-language:    Haskell2010
 
 executable set-constraint-solver
@@ -32,15 +32,15 @@ executable set-constraint-solver
   other-modules:     Syntax, SMTHelpers, TseitinPredicates, MonadicTheorySolver, SolveSetConstraints, TreeGrammar, ArgParse, Andersen
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       
-                       simple-smt >= 0.9.4,
-                       optparse-applicative >= 0.14.3.0,
-                       base >= 4.12 && < 5,
-                       simple-smt >= 0.9.4,
-                       mtl == 2.2.2,
-                       containers == 0.6.0.1,
-                       optparse-applicative >= 0.14.3.0,
-                       parsec == 3.1.13.0,
-                       hashable == 1.2.7.0
+                       simple-smt,
+                       optparse-applicative,
+                       base,
+                       simple-smt,
+                       mtl,
+                       containers,
+                       optparse-applicative,
+                       parsec,
+                       hashable
   default-language:    Haskell2010
 
 test-suite project-test

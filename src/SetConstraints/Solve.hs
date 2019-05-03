@@ -1,5 +1,5 @@
 module SetConstraints.Solve 
-    (   Syntax.Expr(..), Syntax.CExpr(..), ArgParse.Options(..),
+    (   Syntax.Expr(..), Syntax.CExpr(..), ArgParse.Options(..), Syntax.withProjection, Syntax.withProjectionLHS,
         solve) where
 
 import qualified SolveSetConstraints as InternalSolve

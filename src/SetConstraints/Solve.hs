@@ -1,6 +1,6 @@
 module SetConstraints.Solve 
     (   Syntax.Expr(..), Syntax.CExpr(..), ArgParse.Options(..), Syntax.withProjection, Syntax.withProjectionLhs,
-        solve) where
+        Syntax.Projection(..), solve) where
 
 import qualified SolveSetConstraints as InternalSolve
 import qualified Syntax

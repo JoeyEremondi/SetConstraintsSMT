@@ -48,7 +48,7 @@ intToBits n i = BitVector $ map bitToSexp paddedBinaryString
     bitToSexp '0' = SMT.bool False
     bitToSexp '1' = SMT.bool True
 
-solveSetConstraints :: SMT.Solver -> Options -> (Expr, CExpr) -> IO ()
+solveSetConstraints :: SMT.Solver -> Options -> (Expr, CExpr) -> IO (Either String ())
 solveSetConstraints s options (nonEmptyExpr, cInitial)
   --Declare our inclusion function
   --
@@ -79,9 +79,9 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   case result of 
     (Left r) -> do
       when (verbose options) (SMT.simpleCommand s ["get-unsat-core"]) 
-      putStrLn "Could not find solution to constraints"
-    (Right r) -> putStrLn "Found Solution"
-  return ()
+      return $ Left "Could not find solution to constraints"
+    (Right r) -> Right <$> putStrLn "Found Solution"
+  
     -- exprSubset lhs rhs = (Fun "literalValue") $$$ [exprFun lhs, exprFun rhs]
   where
     nonEmptyConstr = CNot (CSubset nonEmptyExpr Bottom)

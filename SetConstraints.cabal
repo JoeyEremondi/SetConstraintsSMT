@@ -1,0 +1,57 @@
+name:                SetConstraints
+version:             0.1.0.0
+-- synopsis:
+-- description:
+homepage:            https://github.com/JoeyEremondi/SetConstraintsSMT
+license:             BSD3
+license-file:        LICENSE
+author:              Joey Eremondi
+maintainer:          joey@eremondi.com
+copyright:           2019 Joseph Eremondi
+category:            Constraint
+build-type:          Simple
+extra-source-files:  README.md
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  exposed-modules: SetConstraints.Solve
+  other-modules:     Syntax, SMTHelpers, TseitinPredicates, MonadicTheorySolver, SolveSetConstraints, TreeGrammar, ArgParse, Andersen
+  build-depends:       base >= 4.12 && < 5,
+                       simple-smt >= 0.9.4,
+                       mtl == 2.2.2,
+                       containers == 0.6.0.1,
+                       optparse-applicative >= 0.14.3.0,
+                       parsec == 3.1.13.0,
+                       hashable == 1.2.7.0
+  default-language:    Haskell2010
+
+executable set-constraint-solver
+  hs-source-dirs:      app, src
+  main-is:             Main.hs
+  other-modules:     Syntax, SMTHelpers, TseitinPredicates, MonadicTheorySolver, SolveSetConstraints, TreeGrammar, ArgParse, Andersen
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       
+                       simple-smt >= 0.9.4,
+                       optparse-applicative >= 0.14.3.0,
+                       base >= 4.12 && < 5,
+                       simple-smt >= 0.9.4,
+                       mtl == 2.2.2,
+                       containers == 0.6.0.1,
+                       optparse-applicative >= 0.14.3.0,
+                       parsec == 3.1.13.0,
+                       hashable == 1.2.7.0
+  default-language:    Haskell2010
+
+test-suite project-test
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Spec.hs
+  build-depends:       base
+                     , SetConstraints
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  default-language:    Haskell2010
+
+source-repository head
+  type:     git
+  location: https://github.com/JoeyEremondi/SetConstraintsSMT

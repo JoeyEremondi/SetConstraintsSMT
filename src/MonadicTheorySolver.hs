@@ -305,13 +305,19 @@ declareDomain s numPreds bvType boolDomPreds boolDomArgName
   --Declare each of our existential variables 
   --Declare our domain function
   --We separate it into a quantified part and non quantified part
- =
+ = do
+  SMT.declareFun 
+    s
+    "domainToBeSolved"
+     bvType
+    SMT.tBool
+  let bitNames = nameToBitNames numPreds boolDomArgName
   SMT.defineFun
     s
     "domain"
-    (zip (nameToBitNames numPreds boolDomArgName) bvType)
+    (zip bitNames bvType)
     SMT.tBool
-    boolDomPreds
+    (boolDomPreds `SMT.and`  ((Fun "domainToBeSolved") $$ (map SMT.Atom bitNames)))
   -- SMT.declareFun s "functionDomain" bvType SMT.tBool
   --TODO split into separate functions
   -- let domainArgName = "arg-domain"
@@ -369,7 +375,7 @@ makePred s options litVarFor litList
   log $ "In theory solver, numBits: " ++ show numPreds
   -- putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
   let comp = do
-        boolDomPredList <- forM subExprs (booleanDomainClause boolDomArg)
+        -- boolDomPredList <- forM subExprs (booleanDomainClause boolDomArg)
         posConstrPreds <- forM litList (posConstrClause litVarFor boolDomArg)
         negConstrPreds <- forM litList (negConstrClause litVarFor numPreds)
         funDomPreds <-
@@ -385,7 +391,7 @@ makePred s options litVarFor litList
             -- enumClauses <- enumeratedDomainClauses funPairs
         return
           ( funDomPreds
-          , andAll $ boolDomPredList ++ posConstrPreds
+          , andAll $ posConstrPreds {- ++ boolDomPredList -} 
           , negConstrPreds)
   let ((funDomPreds, boolDomPreds, negPreds), state) = runState comp state0
   --Declare our domain function and its subfunctions

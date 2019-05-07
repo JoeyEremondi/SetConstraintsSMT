@@ -57,7 +57,7 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   log $ "cInitial: " ++ show cInitial
   SMT.simpleCommand s ["set-logic", "UF"]
   SMT.simpleCommand s ["set-option", ":smt.mbqi", "true"]
-  when (verbose options) $ SMT.simpleCommand s ["set-option", ":produce-unsat-cores", "true"]
+  -- when (verbose options) $ SMT.simpleCommand s ["set-option", ":produce-unsat-cores", "true"]
   SMT.simpleCommand s ["push"]
   -- SMT.declareFun s "literalValue" litType SMT.tBool
   forM_ literalNames $ \(SMT.Atom ln) -> SMT.declare s ln SMT.tBool

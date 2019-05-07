@@ -16,6 +16,11 @@ import qualified Data.Set as Set
 
 import qualified Data.Graph as Graph
 
+l !!! i = 
+  if i < (length l) 
+    then l List.!! i
+    else error ("Index " ++ show i ++ " too big for list " ++ show l)
+
 --listInDomain n l = andAll $ map (\i -> "domain" $$ [nthElem l i]) [0 .. n - 1]
 data Expr
   = Var String
@@ -175,7 +180,7 @@ withProjection :: String -> Int -> Projection -> (Expr -> CExpr) -> CExpr
 withProjection freshName arity proj f =
   let args =
         map (\i -> Var $ freshName ++ "_projarg" ++ show i) [0 .. arity - 1]
-      projVar = args List.!! (projArgNum proj)
+      projVar = args !!! (projArgNum proj)
       result = f projVar
       --Assert that our expression is equal to the function applied to some fresh variables
       projConstr = (FunApp (projFun proj) args) `eq` (projOf proj)

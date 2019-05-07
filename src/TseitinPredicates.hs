@@ -6,7 +6,7 @@ import Syntax
 
 import Control.Monad.State
 import qualified Data.Data as Data
-import Data.List as List
+import qualified Data.List 
 import qualified Data.Map as Map
 import Data.Map ((!))
 import qualified Data.Maybe as Maybe
@@ -68,7 +68,7 @@ p e x = do
 --     -- let xi = SMT.extract x (toInteger i) (toInteger i)
 --   return $ ithBit i x n
 
-ithBit i (BitVector x) n = x List.!! (fromInteger i)
+ithBit i (BitVector x) n = x !!! (fromInteger i)
 
 forallVar :: ConfigM BitVector
 forallVar = head <$> forallVars 1

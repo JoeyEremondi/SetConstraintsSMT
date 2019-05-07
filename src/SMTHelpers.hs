@@ -12,6 +12,8 @@ import qualified Data.List as List
 import qualified SimpleSMT as SMT
 import ArgParse
 
+
+
 data VecFun = VecFun
   { vecFunName :: String
   , argUsedBits :: [[Int]]

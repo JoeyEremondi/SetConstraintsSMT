@@ -238,7 +238,7 @@ declareOrDefineFuns s numPreds bvType state sccs = do
     let bitFor expr =  (predNums state) Map.! expr
     let funFor e =
           case fromIntegral i < length funBitNames of
-            True -> (funBitNames List.!! (fromIntegral i))
+            True -> (funBitNames !!! (fromIntegral i))
           where
             i = bitFor e
     let canDefine scc =

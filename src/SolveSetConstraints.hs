@@ -78,7 +78,7 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   result <- Solver.makePred s options litFun (Set.toList lits)
   case result of 
     (Left r) -> do
-      when (verbose options) (SMT.simpleCommand s ["get-unsat-core"]) 
+      -- when (verbose options) (SMT.simpleCommand s ["get-unsat-core"]) 
       return $ Left "Could not find solution to constraints"
     (Right r) -> Right <$> putStrLn "Found Solution"
   

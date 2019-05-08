@@ -181,9 +181,10 @@ withProjection freshName arity proj f =
   let args =
         map (\i -> Var $ freshName ++ "_projarg" ++ show i) [0 .. arity - 1]
       projVar = args !!! (projArgNum proj)
+      tops = map (\_ -> Top) args
       result = f projVar
       --Assert that our expression is equal to the function applied to some fresh variables
-      projConstr = (FunApp (projFun proj) args) `eq` (projOf proj)
+      projConstr = (FunApp (projFun proj) args) `eq` (projOf proj `Intersect` (FunApp (projFun proj) tops))
       --Assert that the variable arguments are empty iff the RHS is empty
       --This is necessary, since F(X1...Xk) is empty if any Xi is empty
       projEqConstr =

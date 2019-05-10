@@ -10,4 +10,4 @@ import SMTHelpers (makeSolver)
 solve :: ArgParse.Options -> (Syntax.CExpr) -> IO (Either String () )
 solve options constr = do
     s <- makeSolver options
-    InternalSolve.solveSetConstraints s options (Syntax.Top, constr)
+    InternalSolve.solveSetConstraints s options constr

@@ -48,8 +48,8 @@ intToBits n i = BitVector $ map bitToSexp paddedBinaryString
     bitToSexp '0' = SMT.bool False
     bitToSexp '1' = SMT.bool True
 
-solveSetConstraints :: SMT.Solver -> Options -> (Expr, CExpr) -> IO (Either String ())
-solveSetConstraints s options (nonEmptyExpr, cInitial)
+solveSetConstraints :: SMT.Solver -> Options -> (CExpr) -> IO (Either String ())
+solveSetConstraints s options cInitial
   --Declare our inclusion function
   --
  = do
@@ -65,8 +65,7 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   SMT.assert s $ formulaForCExpr litFun cComplete
   log $
     "Done asserting formula, " ++
-    show (Set.size baseLits) ++
-    " base literals, " ++ show (Set.size lits) ++ " literals total"
+     show (Set.size lits) ++ " literals total"
   log $
     "Partitioned into " ++
     show (length litPartitions) ++ " subproblems: " ++ show litPartitions
@@ -74,7 +73,7 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   --   uncurry subsetLemmaFor
   log "Done asserting subset properties"
   -- assertTransitive
-  log "Done asserting transitivity"
+  -- log "Done asserting transitivity"
   result <- Solver.makePred s options litFun (Set.toList lits)
   case result of 
     (Left r) -> do
@@ -84,30 +83,30 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
   
     -- exprSubset lhs rhs = (Fun "literalValue") $$$ [exprFun lhs, exprFun rhs]
   where
-    nonEmptyConstr = CNot (CSubset nonEmptyExpr Bottom)
-    cBase = (CAnd [cInitial, nonEmptyConstr])
-    cStructural =
-      CAnd $
-      concatMap
-        (uncurry subsetLemmaFor)
-        [(e1, e2) | e1 <- baseExprList, e2 <- baseExprList]
-    cInter = CAnd [cBase, cStructural] --This should have all the literals we need
-    cTransitive =
-      CAnd
-        [ transConstr e1 e2 e3
-        | Literal (e1, e2) <- litList
-        , Just e3list <- [Map.lookup e2 litRightSidesMap]
-        , e3 <- e3list
-        , Map.member (Literal (e1, e3)) litMap
-        ]
-      where
-        transConstr e1 e2 e3 =
-          (CAnd [CSubset e1 e2, CSubset e2 e3]) `CImplies` (CSubset e1 e3)
-    cComplete = CAnd [cInter, cTransitive] --TODO add more
+    -- cStructural =
+    --   CAnd $
+    --   concatMap
+    --     (uncurry subsetLemmaFor)
+    --     [(e1, e2) | e1 <- baseExprList, e2 <- baseExprList]
+    -- cInter = CAnd [cInitial, cStructural] --This should have all the literals we need
+    -- cTransitive =
+    --   CAnd
+    --     [ transConstr e1 e2 e3
+    --     | Literal (e1, e2) <- litList
+    --     , Just e3list <- [Map.lookup e2 litRightSidesMap]
+    --     , e3 <- e3list
+    --     , Map.member (Literal (e1, e3)) litMap
+    --     ]
+    --   where
+    --     transConstr e1 e2 e3 =
+    --       (CAnd [CSubset e1 e2, CSubset e2 e3]) `CImplies` (CSubset e1 e3)
+    cComplete = cInitial --We don't need a bunch of lemmas if we use Z3's SMT solver
+      --And if we do, then we should assert them for the literal variables 
+    -- CAnd [cInter, cTransitive] --TODO add more
     literalNames =
       map (\i -> SMT.Atom $ "literal_" ++ show i) [0 .. length lits - 1]
-    baseLits = literalsInCExpr cBase
-    lits = literalsInCExpr cInter
+    -- baseLits = literalsInCExpr cBase
+    lits = literalsInCExpr cInitial
     litList = Set.toList lits
     litMap = Map.fromList $ flip zip literalNames $ litList
     litFun l =
@@ -123,9 +122,9 @@ solveSetConstraints s options (nonEmptyExpr, cInitial)
     toFloat = (fromIntegral :: Int -> Float)
     numBits = ceiling $ logBase 2 (toFloat $ Set.size lits)
     litType = replicate numBits SMT.tBool
-    baseExprs = exprsInCExpr cBase
-    baseExprList = Set.toList baseExprs
-    exprs = exprsInCExpr cInter
+    -- baseExprs = exprsInCExpr cBase
+    -- baseExprList = Set.toList baseExprs
+    exprs = exprsInCExpr cInitial
     exprList = Set.toList exprs
     -- exprMap = Map.fromList $ zip (exprList) [0 ..]
     -- exprFun = (intToBits numBits) . (exprMap Map.!)

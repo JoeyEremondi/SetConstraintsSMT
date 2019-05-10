@@ -67,14 +67,15 @@ main = do
     -- Cons(T,T) /\ X == {} => C2 = {}
     -- D = C1 \/ C2
   inConstrsString <- readFile (inFile options)
-  let (inConstrs :: (Expr, CExpr)) =
+  let (inConstrs@(e,c) :: (Expr, CExpr)) =
         case parseBanshee options of
           False -> read inConstrsString
           True -> (Var "XDummy", parseBansheeString inConstrsString)
+  let constr = CAnd [c, (CNot (e `CSubset` Bottom))]
   s <- makeSolver options
   -- solveSetConstraints s1 cset
   -- solveSetConstraints s1 goodCheck
-  eitherRet <- solveSetConstraints s options inConstrs
+  eitherRet <- solveSetConstraints s options constr
   case eitherRet of
     Left s -> putStrLn s
     Right _ -> putStrLn "Solution found"

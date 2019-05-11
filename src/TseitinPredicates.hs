@@ -143,7 +143,10 @@ negConstrClause litVarFor numPreds l@(Literal (e1, e2)) = do
   x <- fresh numPreds
   pe1 <- p e1 x
   pe2 <- p e2 x
-  return $ (SMT.not  $ litVarFor l) ==> (pe1 /\ (SMT.not pe2))
+  --Assert that each existential variable is in our domain
+  let inDomain = domain $$$ [x]
+  --And that it satisfies P_e1 and not P_e2 (i.e. e1 contains an element not in e2, i.e. e1 not subset of e2)
+  return $ (SMT.not  $ litVarFor l) ==> (inDomain /\ pe1 /\ (SMT.not pe2))
 
 --Assert that the given function is closed over the domain
 funClause :: VecFun -> ConfigM SMT.SExpr

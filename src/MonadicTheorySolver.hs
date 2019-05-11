@@ -406,8 +406,6 @@ makePred s options litVarFor litList
   log "Declaring existentials"
   forM_ (existentialVars state) $ \v -> do
     declareVec s v bvType
-    --Assert that each existential variable is in our domain
-    SMT.assert s $ domain $$$ [nameToBits numPreds v]
   --Assert the properties of each existential variable
   log "Assert existential properties"
   forM_ negPreds $ SMT.assert s

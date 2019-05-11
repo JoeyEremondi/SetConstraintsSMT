@@ -83,6 +83,8 @@ withNForalls vars numBits comp = do
   where
     varTypes = [SMT.List [bit, SMT.tBool] | bv <- vars, bit <- bitList bv]
 
+--Return the constraint that all current quantified universals
+--are in the domain
 validDomain :: ConfigM SExpr
 validDomain = do
   vars <- gets universalVars
@@ -357,7 +359,7 @@ makePred s options litVarFor litList
   let subExprs = orderedSubExpressions litList
       -- (posList, negList) = List.partition isPos clist
       theMaxArity = maxArity subExprs
-      numForall = 2 + theMaxArity
+      numForall = theMaxArity
       -- constrNums = allExprNums subExprs
       bvType = makeBvType numPreds
       vars =
@@ -379,15 +381,15 @@ makePred s options litVarFor litList
         posConstrPreds <- forM litList (posConstrClause litVarFor boolDomArg)
         negConstrPreds <- forM litList (negConstrClause litVarFor numPreds)
         funDomPreds <-
-          withNForalls vars (toInteger $ length subExprs) $ \vars
+          withNForalls vars (toInteger numPreds) $ \vars
             --TODO only do clauses for undefined function vars
            -> do
-            predClauses <- forM subExprs functionDomainClause
+            -- predClauses <- forM subExprs functionDomainClause
             isValidDomain <- validDomain
             funClauses <- forM funs funClause
             let singleFunClause = andAll funClauses
             -- return $ isValidDomain ==> singleFunClause
-            return $ (isValidDomain ==> (andAll predClauses)) /\ singleFunClause
+            return $ (isValidDomain ==> singleFunClause)
             -- enumClauses <- enumeratedDomainClauses funPairs
         return
           ( funDomPreds

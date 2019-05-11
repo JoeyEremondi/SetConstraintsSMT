@@ -86,27 +86,27 @@ funNamed f = do
   funs <- gets funVals
   return $ funs Map.! f
 
-functionDomainClause :: Expr -> ConfigM SMT.SExpr
-functionDomainClause e = do
-  n <- getNumPreds
-  case e of
-    FunApp fname args -> do
-      f <- funNamed fname
-      xs <- forallVars (length args)
-      let fxs = bvApply n f xs
-      lhs <- p e fxs
-      rhs <- forM (zip args xs) $ \(ex, x) -> p ex x
-        --Need constraint that no g(...) is in f(...) set
-      let eqCond = andAll rhs === lhs
-      gs <- differentFuns f
-      neqConds <-
-        forM gs $ \(g, ar) -> do
-          xs <- forallVars ar
-          let gxs = bvApply n g xs
-          lhs <- p e gxs
-          return (lhs === SMT.bool False)
-      return $ eqCond /\ andAll neqConds
-    _ -> return $ SMT.bool True
+-- functionDomainClause :: Expr -> ConfigM SMT.SExpr
+-- functionDomainClause e = do
+--   n <- getNumPreds
+--   case e of
+--     FunApp fname args -> do
+--       f <- funNamed fname
+--       xs <- forallVars (length args)
+--       let fxs = bvApply n f xs
+--       lhs <- p e fxs
+--       rhs <- forM (zip args xs) $ \(ex, x) -> p ex x
+--         --Need constraint that no g(...) is in f(...) set
+--       let eqCond = andAll rhs === lhs
+--       gs <- differentFuns f
+--       neqConds <-
+--         forM gs $ \(g, ar) -> do
+--           xs <- forallVars ar
+--           let gxs = bvApply n g xs
+--           lhs <- p e gxs
+--           return (lhs === SMT.bool False)
+--       return $ eqCond /\ andAll neqConds
+--     _ -> return $ SMT.bool True
 
 booleanDomainClause :: BitVector -> Expr -> ConfigM SMT.SExpr
 booleanDomainClause x e =

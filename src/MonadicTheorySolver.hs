@@ -88,8 +88,11 @@ withNForalls vars numBits comp = do
 validDomain :: ConfigM SExpr
 validDomain = do
   vars <- gets universalVars
-  let varResults = map (\x -> domain $$$ [x]) vars
-  return $ andAll varResults
+  case vars of
+    [] -> return $ SMT.bool True
+    _ -> do
+      let varResults = map (\x -> domain $$$ [x]) vars
+      return $ andAll varResults
 
 enumerateDomain :: Integral i => SMT.Solver -> i -> [SExpr] -> IO [BitVector]
 enumerateDomain s numPreds bvType = do

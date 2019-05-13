@@ -77,6 +77,7 @@ declareProdFuncions s numPreds bvType funs maxArity =
 
 withNForalls ::
      [BitVector] -> Integer -> ([BitVector] -> ConfigM SExpr) -> ConfigM SExpr
+withNForalls vars 0 comp = comp []
 withNForalls vars numBits comp = do
   result <- comp vars
   return $ SMT.List [SMT.Atom "forall", SMT.List varTypes, result]

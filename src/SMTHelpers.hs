@@ -72,8 +72,9 @@ funToBitFuns n f = map Fun $ nameToBitNames n (vecFunName f)
 (Fun f) $$ args = SMT.List (SMT.Atom f : args)
 
 ($$$) :: Fun -> [BitVector] -> SMT.SExpr
-(Fun f) $$$ [] = (SMT.Atom f)
-(Fun f) $$$ args = SMT.List (SMT.Atom f : concatMap bitList args)
+(Fun f) $$$ args = case concatMap bitList args of
+  [] -> SMT.Atom f
+  l -> SMT.List (SMT.Atom f : l)
 
 --map SMT.List $ List.transpose ((unwrap $ nameToBits n vf) : map unwrap args)
 bvApply :: Integral i => i -> VecFun -> [BitVector] -> BitVector

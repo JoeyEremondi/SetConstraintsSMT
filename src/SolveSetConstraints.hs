@@ -56,7 +56,8 @@ solveSetConstraints s options cInitial
   let log = if (verbose options) then putStrLn else (\ _ -> return ())
   log $ "cInitial: " ++ show cInitial
   SMT.simpleCommand s ["set-logic", "UF"]
-  SMT.simpleCommand s ["set-option", ":smt.mbqi", "true"]
+  when (solver options == "z3") $ 
+    SMT.simpleCommand s ["set-option", ":smt.mbqi", "true"]
   -- when (verbose options) $ SMT.simpleCommand s ["set-option", ":produce-unsat-cores", "true"]
   SMT.simpleCommand s ["push"]
   -- SMT.declareFun s "literalValue" litType SMT.tBool

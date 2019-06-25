@@ -166,20 +166,20 @@ solveSetConstraints s options cInitial
     --       solverLoop (i + 1)
     --     Right _ -> findResults i rest
     --   return ()
-    assertTransitive =
-      let bitNames = map (\i -> "bit_" ++ show i) [0 .. numBits - 1]
-          [arg1names, arg2names, arg3names] =
-            map (\arg -> map (arg ++) bitNames) ["arg1_", "arg2_", "arg3"]
-          typePairs =
-            map (\x -> (SMT.Atom x, SMT.tBool)) $
-            arg1names ++ arg2names ++ arg3names
-          [arg1, arg2, arg3] =
-            map (map SMT.Atom) [arg1names, arg2names, arg3names]
-          bodyCond =
-            (((Fun "literalValue") $$$ [BitVector arg1, BitVector arg2]) /\
-             ((Fun "literalValue") $$$ [BitVector arg2, BitVector arg3])) ==>
-            ((Fun "literalValue") $$$ [BitVector arg1, BitVector arg3])
-       in SMT.assert s $ forAll typePairs bodyCond
+    -- assertTransitive =
+    --   let bitNames = map (\i -> "bit_" ++ show i) [0 .. numBits - 1]
+    --       [arg1names, arg2names, arg3names] =
+    --         map (\arg -> map (arg ++) bitNames) ["arg1_", "arg2_", "arg3"]
+    --       typePairs =
+    --         map (\x -> (SMT.Atom x, SMT.tBool)) $
+    --         arg1names ++ arg2names ++ arg3names
+    --       [arg1, arg2, arg3] =
+    --         map (map SMT.Atom) [arg1names, arg2names, arg3names]
+    --       bodyCond =
+    --         (((Fun "literalValue") $$$ [BitVector arg1, BitVector arg2]) /\
+    --          ((Fun "literalValue") $$$ [BitVector arg2, BitVector arg3])) ==>
+    --         ((Fun "literalValue") $$$ [BitVector arg1, BitVector arg3])
+    --    in SMT.assert s $ forAll typePairs bodyCond
     -- assertTransitive =
     --   forM
     --     [ (e1, e2, e3)

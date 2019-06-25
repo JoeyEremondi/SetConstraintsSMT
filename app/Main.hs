@@ -77,8 +77,8 @@ main = do
   -- solveSetConstraints s1 goodCheck
   eitherRet <- solveSetConstraints s options constr
   case eitherRet of
-    Left s -> putStrLn s
-    Right _ -> putStrLn "Solution found"
+    Left s -> putStrLn $ ";;; " ++ s
+    Right _ -> putStrLn ";;;  Solution found"
   -- putStrLn $ show result
 
 

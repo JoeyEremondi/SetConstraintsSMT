@@ -25,3 +25,4 @@ project-exe.prof.html
 bzip2_constr_cleaned_200.banshee
 bzip2_constr_cleaned_400.banshee
 smallCheck.sc
+test.smt-lib

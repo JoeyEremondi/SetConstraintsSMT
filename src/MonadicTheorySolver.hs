@@ -111,16 +111,16 @@ enumerateDomain s numPreds bvType = do
   where
     domainVal = nameToBits numPreds "domain-val"
     helper accum = do
-      putStrLn "Doing check in theory solver"
+      putStrLn ";;; Doing check in theory solver"
       result <- SMT.check s
-      putStrLn "Done check in theory solver"
+      putStrLn ";;; Done check in theory solver"
       case result of
         SMT.Sat -> do
           valueExpr <- getBitVec s domainVal
           SMT.assert s (SMT.not (domainVal `vecEq` valueExpr))
           helper (valueExpr : accum)
         SMT.Unsat -> return accum
-        e -> error $ "TODO Failed quant enumerating domain" ++ show e
+        e -> error $ ";;; TODO Failed quant enumerating domain" ++ show e
 
 --To enumerate through our productions
 enumerateProductions ::
@@ -255,8 +255,8 @@ declareOrDefineFuns s numPreds bvType state exprs = do
     declareFun
       s
       varFun
-      (replicate (getArity f) $ makeBvType numVars )
-      SMT.tBool
+      (replicate (getArity f) bvType  )
+      (makeBvType numVars)
     --Define the function that computes the function for each bit corresponding
     --to a constructor application
     let funBodies = 
@@ -285,7 +285,7 @@ declareOrDefineFuns s numPreds bvType state exprs = do
               zip [argName] [bvType])
             allArgNames
     --Define the overall function by concatenating the unknowns with the known values
-    defineFun s (Fun fName) argPairs SMT.tBool (SMT.concat (varFun $$$ allArgs) (SMT.List $ (SMT.Atom "bvor") : funBodies))
+    defineFun s (Fun fName) argPairs bvType (SMT.concat (varFun $$$ allArgs) (SMT.List $ (SMT.Atom "concat") : funBodies))
   return ()
 
 declareDomain ::
@@ -342,7 +342,7 @@ makePred ::
 makePred s options litVarFor litList
   --setOptions s
  = do
-  let log = if (verbose options) then putStrLn else (\ _ -> return ())
+  let log = if (verbose options) then (putStrLn . (";;; " ++)) else (\ _ -> return ())
   let subExprs = orderedSubExpressions litList
       -- (posList, negList) = List.partition isPos clist
       theMaxArity = maxArity subExprs
@@ -360,7 +360,7 @@ makePred s options litVarFor litList
       boolDomArg = nameToBits numPreds boolDomArgName
       numPreds =  (length (pvars eqClasses)) + (length (pfunApps eqClasses))
   log ("Lit Vars: " ++ show [(l, litVarFor l) | l <- litList]) 
-  log ("Pred numbers: " ++ show (varNums state0) ++ "\nand\n" ++ show (appNums state0))
+  log ("Pred numbers: " ++ show (varNums state0) ++ "\n;;;and\n;;;" ++ show (appNums state0))
   log $ "In theory solver, numBits: " ++ show numPreds
   -- putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
   let comp = do
@@ -425,13 +425,13 @@ printAndReturnResult s options numPreds bvType state funs allFreeVars
   case getModel options of
     True -> do
       domain <- enumerateDomain s numPreds bvType
-      putStrLn $ "DOMAIN: " ++ show domain
+      putStrLn $ ";;; DOMAIN: " ++ show domain
       prodsFrom <- enumerateProductions s bvType funs
         --TODO do based on options
       forM_ prodsFrom $ \(from, f, to) ->
-        putStrLn $ show from ++ "  ->  " ++ show f ++ show to
+        putStrLn $ ";;; " ++ show from ++ "  ->  " ++ show f ++ show to
       forM_ allFreeVars $ \v -> do
         prods <- varProductions s v ((varNums state) Map.! v) numPreds
-        forM prods $ \prod -> putStrLn $ varName v ++ "  ->  " ++ (show prod)
+        forM prods $ \prod -> putStrLn $ ";;; " ++ varName v ++ "  ->  " ++ (show prod)
     False -> return ()
   return $ Right $ error "TODO " --() --TODO return solution

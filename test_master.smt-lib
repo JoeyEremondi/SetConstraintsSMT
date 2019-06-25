@@ -1,0 +1,460 @@
+(set-option :print-success true )
+
+(set-option :produce-models true )
+
+;;;; cInitial: CAnd [CAnd [CSubset (Var "D") (FunApp "Null" []),CSubset (Var "X") (Union (FunApp "Cons" [Top,Top]) (FunApp "Null" [])),CImplies (CNot (CSubset (Intersect (FunApp "Null" []) (Var "X")) Bottom)) (CAnd [CSubset (Var "C1") (FunApp "Null" []),CSubset (FunApp "Null" []) (Var "C1")]),CImplies (CAnd [CSubset (Intersect (FunApp "Null" []) (Var "X")) Bottom,CSubset Bottom (Intersect (FunApp "Null" []) (Var "X"))]) (CAnd [CSubset (Var "C1") Bottom,CSubset Bottom (Var "C1")]),CImplies (CNot (CSubset (Intersect (Intersect (Neg (FunApp "Null" [])) (FunApp "Cons" [Top,Top])) (Var "X")) Bottom)) (CAnd [CSubset (Var "C2") (FunApp "Cons" [FunApp "Const" [],FunApp "Cons" [FunApp "Const" [],Var "D"]]),CSubset (FunApp "Cons" [FunApp "Const" [],FunApp "Cons" [FunApp "Const" [],Var "D"]]) (Var "C2")]),CImplies (CAnd [CSubset (Intersect (Intersect (Neg (FunApp "Null" [])) (FunApp "Cons" [Top,Top])) (Var "X")) Bottom,CSubset Bottom (Intersect (Intersect (Neg (FunApp "Null" [])) (FunApp "Cons" [Top,Top])) (Var "X"))]) (CAnd [CSubset (Var "C2") Bottom,CSubset Bottom (Var "C2")]),CAnd [CSubset (Var "D") (Union (Var "C1") (Var "C2")),CSubset (Union (Var "C1") (Var "C2")) (Var "D")]],CNot (CSubset (Intersect (Var "X") (Neg (FunApp "Cons" [Top,Top]))) Bottom)]
+(set-logic UF )
+
+(set-option :smt.mbqi true )
+
+(push )
+
+(declare-fun literal_0 () Bool )
+
+(declare-fun literal_1 () Bool )
+
+(declare-fun literal_2 () Bool )
+
+(declare-fun literal_3 () Bool )
+
+(declare-fun literal_4 () Bool )
+
+(declare-fun literal_5 () Bool )
+
+(declare-fun literal_6 () Bool )
+
+(declare-fun literal_7 () Bool )
+
+(declare-fun literal_8 () Bool )
+
+(declare-fun literal_9 () Bool )
+
+(declare-fun literal_10 () Bool )
+
+(declare-fun literal_11 () Bool )
+
+(declare-fun literal_12 () Bool )
+
+(declare-fun literal_13 () Bool )
+
+(declare-fun literal_14 () Bool )
+
+(declare-fun literal_15 () Bool )
+
+(declare-fun literal_16 () Bool )
+
+(assert (and (and literal_5 literal_6 (=> (not literal_10 ) (and literal_0 literal_12 ) ) (=> (and literal_10 literal_16 ) (and literal_1 literal_13 ) ) (=> (not literal_9 ) (and literal_2 literal_11 ) ) (=> (and literal_9 literal_15 ) (and literal_3 literal_14 ) ) (and literal_4 literal_7 ) ) (not literal_8 ) ) )
+
+;;;; Done asserting formula, 17 literals total
+;;;; Partitioned into 2 subproblems: [[Literal {unLiteral = (Bottom,Var "C1")},Literal {unLiteral = (FunApp "Null" [],Var "C1")},Literal {unLiteral = (Union (Var "C1") (Var "C2"),Var "D")},Literal {unLiteral = (FunApp "Cons" [FunApp "Const" [],FunApp "Cons" [FunApp "Const" [],Var "D"]],Var "C2")},Literal {unLiteral = (Bottom,Var "C2")},Literal {unLiteral = (Var "D",Union (Var "C1") (Var "C2"))},Literal {unLiteral = (Var "C2",Bottom)},Literal {unLiteral = (Var "C2",FunApp "Cons" [FunApp "Const" [],FunApp "Cons" [FunApp "Const" [],Var "D"]])},Literal {unLiteral = (Var "D",FunApp "Null" [])},Literal {unLiteral = (Var "C1",Bottom)},Literal {unLiteral = (Var "C1",FunApp "Null" [])}],[Literal {unLiteral = (Bottom,Intersect (FunApp "Null" []) (Var "X"))},Literal {unLiteral = (Bottom,Intersect (Intersect (Neg (FunApp "Null" [])) (FunApp "Cons" [Top,Top])) (Var "X"))},Literal {unLiteral = (Intersect (FunApp "Null" []) (Var "X"),Bottom)},Literal {unLiteral = (Intersect (Intersect (Neg (FunApp "Null" [])) (FunApp "Cons" [Top,Top])) (Var "X"),Bottom)},Literal {unLiteral = (Intersect (Var "X") (Neg (FunApp "Cons" [Top,Top])),Bottom)},Literal {unLiteral = (Var "X",Union (FunApp "Cons" [Top,Top]) (FunApp "Null" []))}]]
+;;;; Done asserting subset properties
+;;;; Lit Vars: [(Literal {unLiteral = (Var "C1",FunApp "Null" [])},Atom "literal_0"),(Literal {unLiteral = (Var "C1",Bottom)},Atom "literal_1"),(Literal {unLiteral = (Var "C2",FunApp "Cons" [FunApp "Const" [],FunApp "Cons" [FunApp "Const" [],Var "D"]])},Atom "literal_2"),(Literal {unLiteral = (Var "C2",Bottom)},Atom "literal_3"),(Literal {unLiteral = (Var "D",Union (Var "C1") (Var "C2"))},Atom "literal_4"),(Literal {unLiteral = (Var "D",FunApp "Null" [])},Atom "literal_5"),(Literal {unLiteral = (Var "X",Union (FunApp "Cons" [Top,Top]) (FunApp "Null" []))},Atom "literal_6"),(Literal {unLiteral = (Union (Var "C1") (Var "C2"),Var "D")},Atom "literal_7"),(Literal {unLiteral = (Intersect (Var "X") (Neg (FunApp "Cons" [Top,Top])),Bottom)},Atom "literal_8"),(Literal {unLiteral = (Intersect (Intersect (Neg (FunApp "Null" [])) (FunApp "Cons" [Top,Top])) (Var "X"),Bottom)},Atom "literal_9"),(Literal {unLiteral = (Intersect (FunApp "Null" []) (Var "X"),Bottom)},Atom "literal_10"),(Literal {unLiteral = (FunApp "Cons" [FunApp "Const" [],FunApp "Cons" [FunApp "Const" [],Var "D"]],Var "C2")},Atom "literal_11"),(Literal {unLiteral = (FunApp "Null" [],Var "C1")},Atom "literal_12"),(Literal {unLiteral = (Bottom,Var "C1")},Atom "literal_13"),(Literal {unLiteral = (Bottom,Var "C2")},Atom "literal_14"),(Literal {unLiteral = (Bottom,Intersect (Intersect (Neg (FunApp "Null" [])) (FunApp "Cons" [Top,Top])) (Var "X"))},Atom "literal_15"),(Literal {unLiteral = (Bottom,Intersect (FunApp "Null" []) (Var "X"))},Atom "literal_16")]
+;;;; Pred numbers: fromList [(PVar "C1",0),(PVar "C2",2),(PVar "D",4),(PVar "X",7),(PFunApp "Cons" [FunApp "Const" [],Var "D"],5),(PFunApp "Cons" [FunApp "Const" [],FunApp "Cons" [FunApp "Const" [],Var "D"]],6),(PFunApp "Cons" [Top,Top],8),(PFunApp "Const" [],3),(PFunApp "Null" [],1)]
+;;;; In theory solver, numBits: 9
+;;;; Declaring domain
+(declare-fun domainToBeSolved (Bool Bool Bool Bool Bool Bool Bool Bool Bool ) Bool )
+
+(define-fun domain ((z_boolDomain-0 Bool ) (z_boolDomain-1 Bool ) (z_boolDomain-2 Bool ) (z_boolDomain-3 Bool ) (z_boolDomain-4 Bool ) (z_boolDomain-5 Bool ) (z_boolDomain-6 Bool ) (z_boolDomain-7 Bool ) (z_boolDomain-8 Bool ) ) Bool (and (and (=> literal_0 (=> z_boolDomain-0 z_boolDomain-1 ) ) (=> literal_1 (=> z_boolDomain-0 false ) ) (=> literal_2 (=> z_boolDomain-2 z_boolDomain-6 ) ) (=> literal_3 (=> z_boolDomain-2 false ) ) (=> literal_4 (=> z_boolDomain-4 (or z_boolDomain-0 z_boolDomain-2 ) ) ) (=> literal_5 (=> z_boolDomain-4 z_boolDomain-1 ) ) (=> literal_6 (=> z_boolDomain-7 (or z_boolDomain-8 z_boolDomain-1 ) ) ) (=> literal_7 (=> (or z_boolDomain-0 z_boolDomain-2 ) z_boolDomain-4 ) ) (=> literal_8 (=> (and z_boolDomain-7 (not z_boolDomain-8 ) ) false ) ) (=> literal_9 (=> (and (and (not z_boolDomain-1 ) z_boolDomain-8 ) z_boolDomain-7 ) false ) ) (=> literal_10 (=> (and z_boolDomain-1 z_boolDomain-7 ) false ) ) (=> literal_11 (=> z_boolDomain-6 z_boolDomain-2 ) ) (=> literal_12 (=> z_boolDomain-1 z_boolDomain-0 ) ) (=> literal_13 (=> false z_boolDomain-0 ) ) (=> literal_14 (=> false z_boolDomain-2 ) ) (=> literal_15 (=> false (and (and (not z_boolDomain-1 ) z_boolDomain-8 ) z_boolDomain-7 ) ) ) (=> literal_16 (=> false (and z_boolDomain-1 z_boolDomain-7 ) ) ) ) (domainToBeSolved z_boolDomain-0 z_boolDomain-1 z_boolDomain-2 z_boolDomain-3 z_boolDomain-4 z_boolDomain-5 z_boolDomain-6 z_boolDomain-7 z_boolDomain-8 ) ) )
+
+;;;; Declaring constructors
+(declare-fun Cons-0 (Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool ) Bool )
+
+(declare-fun Cons-2 (Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool ) Bool )
+
+(declare-fun Cons-4 (Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool ) Bool )
+
+(declare-fun Cons-7 (Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool Bool ) Bool )
+
+(define-fun Cons-1 ((f-arg-0-0 Bool ) (f-arg-0-1 Bool ) (f-arg-0-2 Bool ) (f-arg-0-3 Bool ) (f-arg-0-4 Bool ) (f-arg-0-5 Bool ) (f-arg-0-6 Bool ) (f-arg-0-7 Bool ) (f-arg-0-8 Bool ) (f-arg-1-0 Bool ) (f-arg-1-1 Bool ) (f-arg-1-2 Bool ) (f-arg-1-3 Bool ) (f-arg-1-4 Bool ) (f-arg-1-5 Bool ) (f-arg-1-6 Bool ) (f-arg-1-7 Bool ) (f-arg-1-8 Bool ) ) Bool false )
+
+(define-fun Cons-3 ((f-arg-0-0 Bool ) (f-arg-0-1 Bool ) (f-arg-0-2 Bool ) (f-arg-0-3 Bool ) (f-arg-0-4 Bool ) (f-arg-0-5 Bool ) (f-arg-0-6 Bool ) (f-arg-0-7 Bool ) (f-arg-0-8 Bool ) (f-arg-1-0 Bool ) (f-arg-1-1 Bool ) (f-arg-1-2 Bool ) (f-arg-1-3 Bool ) (f-arg-1-4 Bool ) (f-arg-1-5 Bool ) (f-arg-1-6 Bool ) (f-arg-1-7 Bool ) (f-arg-1-8 Bool ) ) Bool false )
+
+(define-fun Cons-5 ((f-arg-0-0 Bool ) (f-arg-0-1 Bool ) (f-arg-0-2 Bool ) (f-arg-0-3 Bool ) (f-arg-0-4 Bool ) (f-arg-0-5 Bool ) (f-arg-0-6 Bool ) (f-arg-0-7 Bool ) (f-arg-0-8 Bool ) (f-arg-1-0 Bool ) (f-arg-1-1 Bool ) (f-arg-1-2 Bool ) (f-arg-1-3 Bool ) (f-arg-1-4 Bool ) (f-arg-1-5 Bool ) (f-arg-1-6 Bool ) (f-arg-1-7 Bool ) (f-arg-1-8 Bool ) ) Bool (and f-arg-0-3 f-arg-1-4 ) )
+
+(define-fun Cons-6 ((f-arg-0-0 Bool ) (f-arg-0-1 Bool ) (f-arg-0-2 Bool ) (f-arg-0-3 Bool ) (f-arg-0-4 Bool ) (f-arg-0-5 Bool ) (f-arg-0-6 Bool ) (f-arg-0-7 Bool ) (f-arg-0-8 Bool ) (f-arg-1-0 Bool ) (f-arg-1-1 Bool ) (f-arg-1-2 Bool ) (f-arg-1-3 Bool ) (f-arg-1-4 Bool ) (f-arg-1-5 Bool ) (f-arg-1-6 Bool ) (f-arg-1-7 Bool ) (f-arg-1-8 Bool ) ) Bool (and f-arg-0-3 f-arg-1-5 ) )
+
+(define-fun Cons-8 ((f-arg-0-0 Bool ) (f-arg-0-1 Bool ) (f-arg-0-2 Bool ) (f-arg-0-3 Bool ) (f-arg-0-4 Bool ) (f-arg-0-5 Bool ) (f-arg-0-6 Bool ) (f-arg-0-7 Bool ) (f-arg-0-8 Bool ) (f-arg-1-0 Bool ) (f-arg-1-1 Bool ) (f-arg-1-2 Bool ) (f-arg-1-3 Bool ) (f-arg-1-4 Bool ) (f-arg-1-5 Bool ) (f-arg-1-6 Bool ) (f-arg-1-7 Bool ) (f-arg-1-8 Bool ) ) Bool (and true true ) )
+
+(declare-fun Const-0 () Bool )
+
+(declare-fun Const-2 () Bool )
+
+(declare-fun Const-4 () Bool )
+
+(declare-fun Const-7 () Bool )
+
+(define-fun Const-1 () Bool false )
+
+(define-fun Const-3 () Bool true )
+
+(define-fun Const-5 () Bool false )
+
+(define-fun Const-6 () Bool false )
+
+(define-fun Const-8 () Bool false )
+
+(declare-fun Null-0 () Bool )
+
+(declare-fun Null-2 () Bool )
+
+(declare-fun Null-4 () Bool )
+
+(declare-fun Null-7 () Bool )
+
+(define-fun Null-1 () Bool true )
+
+(define-fun Null-3 () Bool false )
+
+(define-fun Null-5 () Bool false )
+
+(define-fun Null-6 () Bool false )
+
+(define-fun Null-8 () Bool false )
+
+;;;; Declaring existentials
+(declare-fun x_exists_16-0 () Bool )
+
+(declare-fun x_exists_16-1 () Bool )
+
+(declare-fun x_exists_16-2 () Bool )
+
+(declare-fun x_exists_16-3 () Bool )
+
+(declare-fun x_exists_16-4 () Bool )
+
+(declare-fun x_exists_16-5 () Bool )
+
+(declare-fun x_exists_16-6 () Bool )
+
+(declare-fun x_exists_16-7 () Bool )
+
+(declare-fun x_exists_16-8 () Bool )
+
+(declare-fun x_exists_15-0 () Bool )
+
+(declare-fun x_exists_15-1 () Bool )
+
+(declare-fun x_exists_15-2 () Bool )
+
+(declare-fun x_exists_15-3 () Bool )
+
+(declare-fun x_exists_15-4 () Bool )
+
+(declare-fun x_exists_15-5 () Bool )
+
+(declare-fun x_exists_15-6 () Bool )
+
+(declare-fun x_exists_15-7 () Bool )
+
+(declare-fun x_exists_15-8 () Bool )
+
+(declare-fun x_exists_14-0 () Bool )
+
+(declare-fun x_exists_14-1 () Bool )
+
+(declare-fun x_exists_14-2 () Bool )
+
+(declare-fun x_exists_14-3 () Bool )
+
+(declare-fun x_exists_14-4 () Bool )
+
+(declare-fun x_exists_14-5 () Bool )
+
+(declare-fun x_exists_14-6 () Bool )
+
+(declare-fun x_exists_14-7 () Bool )
+
+(declare-fun x_exists_14-8 () Bool )
+
+(declare-fun x_exists_13-0 () Bool )
+
+(declare-fun x_exists_13-1 () Bool )
+
+(declare-fun x_exists_13-2 () Bool )
+
+(declare-fun x_exists_13-3 () Bool )
+
+(declare-fun x_exists_13-4 () Bool )
+
+(declare-fun x_exists_13-5 () Bool )
+
+(declare-fun x_exists_13-6 () Bool )
+
+(declare-fun x_exists_13-7 () Bool )
+
+(declare-fun x_exists_13-8 () Bool )
+
+(declare-fun x_exists_12-0 () Bool )
+
+(declare-fun x_exists_12-1 () Bool )
+
+(declare-fun x_exists_12-2 () Bool )
+
+(declare-fun x_exists_12-3 () Bool )
+
+(declare-fun x_exists_12-4 () Bool )
+
+(declare-fun x_exists_12-5 () Bool )
+
+(declare-fun x_exists_12-6 () Bool )
+
+(declare-fun x_exists_12-7 () Bool )
+
+(declare-fun x_exists_12-8 () Bool )
+
+(declare-fun x_exists_11-0 () Bool )
+
+(declare-fun x_exists_11-1 () Bool )
+
+(declare-fun x_exists_11-2 () Bool )
+
+(declare-fun x_exists_11-3 () Bool )
+
+(declare-fun x_exists_11-4 () Bool )
+
+(declare-fun x_exists_11-5 () Bool )
+
+(declare-fun x_exists_11-6 () Bool )
+
+(declare-fun x_exists_11-7 () Bool )
+
+(declare-fun x_exists_11-8 () Bool )
+
+(declare-fun x_exists_10-0 () Bool )
+
+(declare-fun x_exists_10-1 () Bool )
+
+(declare-fun x_exists_10-2 () Bool )
+
+(declare-fun x_exists_10-3 () Bool )
+
+(declare-fun x_exists_10-4 () Bool )
+
+(declare-fun x_exists_10-5 () Bool )
+
+(declare-fun x_exists_10-6 () Bool )
+
+(declare-fun x_exists_10-7 () Bool )
+
+(declare-fun x_exists_10-8 () Bool )
+
+(declare-fun x_exists_9-0 () Bool )
+
+(declare-fun x_exists_9-1 () Bool )
+
+(declare-fun x_exists_9-2 () Bool )
+
+(declare-fun x_exists_9-3 () Bool )
+
+(declare-fun x_exists_9-4 () Bool )
+
+(declare-fun x_exists_9-5 () Bool )
+
+(declare-fun x_exists_9-6 () Bool )
+
+(declare-fun x_exists_9-7 () Bool )
+
+(declare-fun x_exists_9-8 () Bool )
+
+(declare-fun x_exists_8-0 () Bool )
+
+(declare-fun x_exists_8-1 () Bool )
+
+(declare-fun x_exists_8-2 () Bool )
+
+(declare-fun x_exists_8-3 () Bool )
+
+(declare-fun x_exists_8-4 () Bool )
+
+(declare-fun x_exists_8-5 () Bool )
+
+(declare-fun x_exists_8-6 () Bool )
+
+(declare-fun x_exists_8-7 () Bool )
+
+(declare-fun x_exists_8-8 () Bool )
+
+(declare-fun x_exists_7-0 () Bool )
+
+(declare-fun x_exists_7-1 () Bool )
+
+(declare-fun x_exists_7-2 () Bool )
+
+(declare-fun x_exists_7-3 () Bool )
+
+(declare-fun x_exists_7-4 () Bool )
+
+(declare-fun x_exists_7-5 () Bool )
+
+(declare-fun x_exists_7-6 () Bool )
+
+(declare-fun x_exists_7-7 () Bool )
+
+(declare-fun x_exists_7-8 () Bool )
+
+(declare-fun x_exists_6-0 () Bool )
+
+(declare-fun x_exists_6-1 () Bool )
+
+(declare-fun x_exists_6-2 () Bool )
+
+(declare-fun x_exists_6-3 () Bool )
+
+(declare-fun x_exists_6-4 () Bool )
+
+(declare-fun x_exists_6-5 () Bool )
+
+(declare-fun x_exists_6-6 () Bool )
+
+(declare-fun x_exists_6-7 () Bool )
+
+(declare-fun x_exists_6-8 () Bool )
+
+(declare-fun x_exists_5-0 () Bool )
+
+(declare-fun x_exists_5-1 () Bool )
+
+(declare-fun x_exists_5-2 () Bool )
+
+(declare-fun x_exists_5-3 () Bool )
+
+(declare-fun x_exists_5-4 () Bool )
+
+(declare-fun x_exists_5-5 () Bool )
+
+(declare-fun x_exists_5-6 () Bool )
+
+(declare-fun x_exists_5-7 () Bool )
+
+(declare-fun x_exists_5-8 () Bool )
+
+(declare-fun x_exists_4-0 () Bool )
+
+(declare-fun x_exists_4-1 () Bool )
+
+(declare-fun x_exists_4-2 () Bool )
+
+(declare-fun x_exists_4-3 () Bool )
+
+(declare-fun x_exists_4-4 () Bool )
+
+(declare-fun x_exists_4-5 () Bool )
+
+(declare-fun x_exists_4-6 () Bool )
+
+(declare-fun x_exists_4-7 () Bool )
+
+(declare-fun x_exists_4-8 () Bool )
+
+(declare-fun x_exists_3-0 () Bool )
+
+(declare-fun x_exists_3-1 () Bool )
+
+(declare-fun x_exists_3-2 () Bool )
+
+(declare-fun x_exists_3-3 () Bool )
+
+(declare-fun x_exists_3-4 () Bool )
+
+(declare-fun x_exists_3-5 () Bool )
+
+(declare-fun x_exists_3-6 () Bool )
+
+(declare-fun x_exists_3-7 () Bool )
+
+(declare-fun x_exists_3-8 () Bool )
+
+(declare-fun x_exists_2-0 () Bool )
+
+(declare-fun x_exists_2-1 () Bool )
+
+(declare-fun x_exists_2-2 () Bool )
+
+(declare-fun x_exists_2-3 () Bool )
+
+(declare-fun x_exists_2-4 () Bool )
+
+(declare-fun x_exists_2-5 () Bool )
+
+(declare-fun x_exists_2-6 () Bool )
+
+(declare-fun x_exists_2-7 () Bool )
+
+(declare-fun x_exists_2-8 () Bool )
+
+(declare-fun x_exists_1-0 () Bool )
+
+(declare-fun x_exists_1-1 () Bool )
+
+(declare-fun x_exists_1-2 () Bool )
+
+(declare-fun x_exists_1-3 () Bool )
+
+(declare-fun x_exists_1-4 () Bool )
+
+(declare-fun x_exists_1-5 () Bool )
+
+(declare-fun x_exists_1-6 () Bool )
+
+(declare-fun x_exists_1-7 () Bool )
+
+(declare-fun x_exists_1-8 () Bool )
+
+(declare-fun x_exists_0-0 () Bool )
+
+(declare-fun x_exists_0-1 () Bool )
+
+(declare-fun x_exists_0-2 () Bool )
+
+(declare-fun x_exists_0-3 () Bool )
+
+(declare-fun x_exists_0-4 () Bool )
+
+(declare-fun x_exists_0-5 () Bool )
+
+(declare-fun x_exists_0-6 () Bool )
+
+(declare-fun x_exists_0-7 () Bool )
+
+(declare-fun x_exists_0-8 () Bool )
+
+;;;; Assert existential properties
+(assert (=> (not literal_0 ) (and (and (domain x_exists_0-0 x_exists_0-1 x_exists_0-2 x_exists_0-3 x_exists_0-4 x_exists_0-5 x_exists_0-6 x_exists_0-7 x_exists_0-8 ) x_exists_0-0 ) (not x_exists_0-1 ) ) ) )
+
+(assert (=> (not literal_1 ) (and (and (domain x_exists_1-0 x_exists_1-1 x_exists_1-2 x_exists_1-3 x_exists_1-4 x_exists_1-5 x_exists_1-6 x_exists_1-7 x_exists_1-8 ) x_exists_1-0 ) (not false ) ) ) )
+
+(assert (=> (not literal_2 ) (and (and (domain x_exists_2-0 x_exists_2-1 x_exists_2-2 x_exists_2-3 x_exists_2-4 x_exists_2-5 x_exists_2-6 x_exists_2-7 x_exists_2-8 ) x_exists_2-2 ) (not x_exists_2-6 ) ) ) )
+
+(assert (=> (not literal_3 ) (and (and (domain x_exists_3-0 x_exists_3-1 x_exists_3-2 x_exists_3-3 x_exists_3-4 x_exists_3-5 x_exists_3-6 x_exists_3-7 x_exists_3-8 ) x_exists_3-2 ) (not false ) ) ) )
+
+(assert (=> (not literal_4 ) (and (and (domain x_exists_4-0 x_exists_4-1 x_exists_4-2 x_exists_4-3 x_exists_4-4 x_exists_4-5 x_exists_4-6 x_exists_4-7 x_exists_4-8 ) x_exists_4-4 ) (not (or x_exists_4-0 x_exists_4-2 ) ) ) ) )
+
+(assert (=> (not literal_5 ) (and (and (domain x_exists_5-0 x_exists_5-1 x_exists_5-2 x_exists_5-3 x_exists_5-4 x_exists_5-5 x_exists_5-6 x_exists_5-7 x_exists_5-8 ) x_exists_5-4 ) (not x_exists_5-1 ) ) ) )
+
+(assert (=> (not literal_6 ) (and (and (domain x_exists_6-0 x_exists_6-1 x_exists_6-2 x_exists_6-3 x_exists_6-4 x_exists_6-5 x_exists_6-6 x_exists_6-7 x_exists_6-8 ) x_exists_6-7 ) (not (or x_exists_6-8 x_exists_6-1 ) ) ) ) )
+
+(assert (=> (not literal_7 ) (and (and (domain x_exists_7-0 x_exists_7-1 x_exists_7-2 x_exists_7-3 x_exists_7-4 x_exists_7-5 x_exists_7-6 x_exists_7-7 x_exists_7-8 ) (or x_exists_7-0 x_exists_7-2 ) ) (not x_exists_7-4 ) ) ) )
+
+(assert (=> (not literal_8 ) (and (and (domain x_exists_8-0 x_exists_8-1 x_exists_8-2 x_exists_8-3 x_exists_8-4 x_exists_8-5 x_exists_8-6 x_exists_8-7 x_exists_8-8 ) (and x_exists_8-7 (not x_exists_8-8 ) ) ) (not false ) ) ) )
+
+(assert (=> (not literal_9 ) (and (and (domain x_exists_9-0 x_exists_9-1 x_exists_9-2 x_exists_9-3 x_exists_9-4 x_exists_9-5 x_exists_9-6 x_exists_9-7 x_exists_9-8 ) (and (and (not x_exists_9-1 ) x_exists_9-8 ) x_exists_9-7 ) ) (not false ) ) ) )
+
+(assert (=> (not literal_10 ) (and (and (domain x_exists_10-0 x_exists_10-1 x_exists_10-2 x_exists_10-3 x_exists_10-4 x_exists_10-5 x_exists_10-6 x_exists_10-7 x_exists_10-8 ) (and x_exists_10-1 x_exists_10-7 ) ) (not false ) ) ) )
+
+(assert (=> (not literal_11 ) (and (and (domain x_exists_11-0 x_exists_11-1 x_exists_11-2 x_exists_11-3 x_exists_11-4 x_exists_11-5 x_exists_11-6 x_exists_11-7 x_exists_11-8 ) x_exists_11-6 ) (not x_exists_11-2 ) ) ) )
+
+(assert (=> (not literal_12 ) (and (and (domain x_exists_12-0 x_exists_12-1 x_exists_12-2 x_exists_12-3 x_exists_12-4 x_exists_12-5 x_exists_12-6 x_exists_12-7 x_exists_12-8 ) x_exists_12-1 ) (not x_exists_12-0 ) ) ) )
+
+(assert (=> (not literal_13 ) (and (and (domain x_exists_13-0 x_exists_13-1 x_exists_13-2 x_exists_13-3 x_exists_13-4 x_exists_13-5 x_exists_13-6 x_exists_13-7 x_exists_13-8 ) false ) (not x_exists_13-0 ) ) ) )
+
+(assert (=> (not literal_14 ) (and (and (domain x_exists_14-0 x_exists_14-1 x_exists_14-2 x_exists_14-3 x_exists_14-4 x_exists_14-5 x_exists_14-6 x_exists_14-7 x_exists_14-8 ) false ) (not x_exists_14-2 ) ) ) )
+
+(assert (=> (not literal_15 ) (and (and (domain x_exists_15-0 x_exists_15-1 x_exists_15-2 x_exists_15-3 x_exists_15-4 x_exists_15-5 x_exists_15-6 x_exists_15-7 x_exists_15-8 ) false ) (not (and (and (not x_exists_15-1 ) x_exists_15-8 ) x_exists_15-7 ) ) ) ) )
+
+(assert (=> (not literal_16 ) (and (and (domain x_exists_16-0 x_exists_16-1 x_exists_16-2 x_exists_16-3 x_exists_16-4 x_exists_16-5 x_exists_16-6 x_exists_16-7 x_exists_16-8 ) false ) (not (and x_exists_16-1 x_exists_16-7 ) ) ) ) )
+
+;;;; Asserting function domain properties
+(assert (forall ((y_univ_1-0 Bool ) (y_univ_1-1 Bool ) (y_univ_1-2 Bool ) (y_univ_1-3 Bool ) (y_univ_1-4 Bool ) (y_univ_1-5 Bool ) (y_univ_1-6 Bool ) (y_univ_1-7 Bool ) (y_univ_1-8 Bool ) (y_univ_2-0 Bool ) (y_univ_2-1 Bool ) (y_univ_2-2 Bool ) (y_univ_2-3 Bool ) (y_univ_2-4 Bool ) (y_univ_2-5 Bool ) (y_univ_2-6 Bool ) (y_univ_2-7 Bool ) (y_univ_2-8 Bool ) ) (=> (and (domain y_univ_1-0 y_univ_1-1 y_univ_1-2 y_univ_1-3 y_univ_1-4 y_univ_1-5 y_univ_1-6 y_univ_1-7 y_univ_1-8 ) (domain y_univ_2-0 y_univ_2-1 y_univ_2-2 y_univ_2-3 y_univ_2-4 y_univ_2-5 y_univ_2-6 y_univ_2-7 y_univ_2-8 ) ) (and (domain (Cons-0 y_univ_1-0 y_univ_1-1 y_univ_1-2 y_univ_1-3 y_univ_1-4 y_univ_1-5 y_univ_1-6 y_univ_1-7 y_univ_1-8 y_univ_2-0 y_univ_2-1 y_univ_2-2 y_univ_2-3 y_univ_2-4 y_univ_2-5 y_univ_2-6 y_univ_2-7 y_univ_2-8 ) (Cons-1 y_univ_1-0 y_univ_1-1 y_univ_1-2 y_univ_1-3 y_univ_1-4 y_univ_1-5 y_univ_1-6 y_univ_1-7 y_univ_1-8 y_univ_2-0 y_univ_2-1 y_univ_2-2 y_univ_2-3 y_univ_2-4 y_univ_2-5 y_univ_2-6 y_univ_2-7 y_univ_2-8 ) (Cons-2 y_univ_1-0 y_univ_1-1 y_univ_1-2 y_univ_1-3 y_univ_1-4 y_univ_1-5 y_univ_1-6 y_univ_1-7 y_univ_1-8 y_univ_2-0 y_univ_2-1 y_univ_2-2 y_univ_2-3 y_univ_2-4 y_univ_2-5 y_univ_2-6 y_univ_2-7 y_univ_2-8 ) (Cons-3 y_univ_1-0 y_univ_1-1 y_univ_1-2 y_univ_1-3 y_univ_1-4 y_univ_1-5 y_univ_1-6 y_univ_1-7 y_univ_1-8 y_univ_2-0 y_univ_2-1 y_univ_2-2 y_univ_2-3 y_univ_2-4 y_univ_2-5 y_univ_2-6 y_univ_2-7 y_univ_2-8 ) (Cons-4 y_univ_1-0 y_univ_1-1 y_univ_1-2 y_univ_1-3 y_univ_1-4 y_univ_1-5 y_univ_1-6 y_univ_1-7 y_univ_1-8 y_univ_2-0 y_univ_2-1 y_univ_2-2 y_univ_2-3 y_univ_2-4 y_univ_2-5 y_univ_2-6 y_univ_2-7 y_univ_2-8 ) (Cons-5 y_univ_1-0 y_univ_1-1 y_univ_1-2 y_univ_1-3 y_univ_1-4 y_univ_1-5 y_univ_1-6 y_univ_1-7 y_univ_1-8 y_univ_2-0 y_univ_2-1 y_univ_2-2 y_univ_2-3 y_univ_2-4 y_univ_2-5 y_univ_2-6 y_univ_2-7 y_univ_2-8 ) (Cons-6 y_univ_1-0 y_univ_1-1 y_univ_1-2 y_univ_1-3 y_univ_1-4 y_univ_1-5 y_univ_1-6 y_univ_1-7 y_univ_1-8 y_univ_2-0 y_univ_2-1 y_univ_2-2 y_univ_2-3 y_univ_2-4 y_univ_2-5 y_univ_2-6 y_univ_2-7 y_univ_2-8 ) (Cons-7 y_univ_1-0 y_univ_1-1 y_univ_1-2 y_univ_1-3 y_univ_1-4 y_univ_1-5 y_univ_1-6 y_univ_1-7 y_univ_1-8 y_univ_2-0 y_univ_2-1 y_univ_2-2 y_univ_2-3 y_univ_2-4 y_univ_2-5 y_univ_2-6 y_univ_2-7 y_univ_2-8 ) (Cons-8 y_univ_1-0 y_univ_1-1 y_univ_1-2 y_univ_1-3 y_univ_1-4 y_univ_1-5 y_univ_1-6 y_univ_1-7 y_univ_1-8 y_univ_2-0 y_univ_2-1 y_univ_2-2 y_univ_2-3 y_univ_2-4 y_univ_2-5 y_univ_2-6 y_univ_2-7 y_univ_2-8 ) ) (domain Const-0 Const-1 Const-2 Const-3 Const-4 Const-5 Const-6 Const-7 Const-8 ) (domain Null-0 Null-1 Null-2 Null-3 Null-4 Null-5 Null-6 Null-7 Null-8 ) ) ) ) )
+
+;;;; About do check SAT
+(check-sat )

@@ -152,6 +152,11 @@ forAll typePairs body = SMT.List [SMT.Atom "forall", types, body]
   where
     types = SMT.List $ map (\(x, y) -> SMT.List [x, y]) typePairs
 
+concatBVs :: [SMT.SExpr] -> SMT.SExpr
+concatBVs args = SMT.List $ (SMT.Atom "concat") : reverse args
+
+concatBV :: SMT.SExpr -> SMT.SExpr -> SMT.SExpr
+concatBV s1 s2 = concatBVs [s1,s2] 
 
 makeSolver opts = do
   let vb = verbose opts

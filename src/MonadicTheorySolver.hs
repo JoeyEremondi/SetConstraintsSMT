@@ -285,7 +285,8 @@ declareOrDefineFuns s numPreds bvType state exprs = do
               zip [argName] [bvType])
             allArgNames
     --Define the overall function by concatenating the unknowns with the known values
-    defineFun s (Fun fName) argPairs bvType (SMT.concat (varFun $$$ allArgs) (SMT.List $ (SMT.Atom "concat") : funBodies))
+    --Z3 is right to left, because of course it is
+    defineFun s (Fun fName) argPairs bvType (concatBV (varFun $$$ allArgs) (concatBVs funBodies))
   return ()
 
 declareDomain ::

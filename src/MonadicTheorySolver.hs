@@ -208,7 +208,7 @@ enumerateProductions s bvType funs
     --     SMT.Unsat -> return accum
     --     _ -> error "TODO Failed quant"
 
-varProductions :: SMT.Solver -> PredExpr -> Integer -> Int -> IO [BitVector]
+varProductions :: SMT.Solver -> PVar -> Integer -> Int -> IO [BitVector]
 varProductions s v i n = do
   SMT.simpleCommand s ["push"]
   declareVec s vname $ makeBvType n
@@ -236,7 +236,7 @@ declareOrDefineFuns ::
   -> t
   -> SExpr
   -> PredNumConfig
-  -> [PredExpr]
+  -> PredExprs
   -> IO [[()]]
 declareOrDefineFuns s numPreds bvType state exprs = do
   let funs = Map.elems $ funVals state
@@ -364,13 +364,13 @@ makePred s options litVarFor litList
       state0 = (initialState numPreds vars (Maybe.mapMaybe toPredExpr subExprs) $ map (\x -> [x]) eqClasses)
       
       funs :: [VecFun] = Map.elems $ funVals state0
-      allFreeVars :: [PredExpr] = filter isVar $ Maybe.catMaybes $ map toPredExpr subExprs  
+      eqClasses = toPredExprs subExprs -- equalityClasses clist subExprs --TODO: bring this back?
+      allFreeVars :: [PVar] = pvars eqClasses  
       boolDomArgName = "z_boolDomain"
       boolDomArg = nameToBits numPreds boolDomArgName
-      eqClasses = Maybe.catMaybes $ map toPredExpr subExprs -- equalityClasses clist subExprs --TODO: bring this back?
-      numPreds =  length eqClasses
+      numPreds =  (length (pvars eqClasses)) + (length (pfunApps eqClasses))
   log ("Lit Vars: " ++ show [(l, litVarFor l) | l <- litList]) 
-  log ("Pred numbers: " ++ show (predNums state0))
+  log ("Pred numbers: " ++ show (varNums state0) ++ "\nand\n" ++ show (appNums state0))
   log $ "In theory solver, numBits: " ++ show numPreds
   -- putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
   let comp = do
@@ -427,7 +427,7 @@ printAndReturnResult ::
   -> SExpr
   -> PredNumConfig
   -> [VecFun]
-  -> [PredExpr]
+  -> [PVar]
   -> IO (Either a b)
 printAndReturnResult s options numPreds bvType state funs allFreeVars
   -- SMT.command s $ SMT.List [SMT.Atom "get-model"]
@@ -441,7 +441,7 @@ printAndReturnResult s options numPreds bvType state funs allFreeVars
       forM_ prodsFrom $ \(from, f, to) ->
         putStrLn $ show from ++ "  ->  " ++ show f ++ show to
       forM_ allFreeVars $ \v -> do
-        prods <- varProductions s v ((predNums state) Map.! v) numPreds
+        prods <- varProductions s v ((varNums state) Map.! v) numPreds
         forM prods $ \prod -> putStrLn $ varName v ++ "  ->  " ++ (show prod)
     False -> return ()
   return $ Right $ error "TODO " --() --TODO return solution

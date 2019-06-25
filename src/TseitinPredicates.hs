@@ -25,7 +25,8 @@ funDomain = Fun "functionDomain"
 
 -- type SBVec = SMT.BitVec
 data PredNumConfig = Config
-  { predNums :: Map.Map PredExpr Integer
+  { varNums :: Map.Map PVar Integer
+  , appNums :: Map.Map PFunApp Integer
   , configNumPreds :: Int
   , funVals :: Map.Map String VecFun
   , universalVars :: [BitVector]
@@ -47,10 +48,10 @@ pSMT :: PredNumConfig -> Expr -> BitVector -> SMT.SExpr
 pSMT config e x = 
   case e of
     (Var e) ->
-      let i = (predNums config) Map.! (PVar e)
+      let i = (varNums config) Map.! (PVar e)
       in ithBit i x (configNumPreds config)
     (FunApp e1 e2) -> 
-      let i = (predNums config) Map.! (PFunApp e1 e2)
+      let i = (appNums config) Map.! (PFunApp (e1, e2))
       in ithBit i x (configNumPreds config)
     (Union e1 e2) -> (pSMT config e1 x) \/ (pSMT config e2 x)
     (Intersect e1 e2) -> (pSMT config e1 x) /\ (pSMT config e2 x)
@@ -156,16 +157,17 @@ funClause f = do
   let fxs = bvApply n f xs
   return $ domain $$$ [fxs]
 
-initialState :: Int -> [BitVector] -> [PredExpr] -> [[PredExpr]] -> PredNumConfig
-initialState numBits vars exprs connComps =
-  let (predMap, numPreds) = allExprNums connComps
+initialState :: Int -> [BitVector] -> PredExprs -> PredNumConfig
+initialState numBits vars exprs  =
+  let (varMap, funAppMap, numPreds) = allExprNums exprs
    in Config
-        { predNums = predMap
+        { varNums = varMap
+        , appNums = funAppMap
         , configNumPreds = numPreds
-        , funVals =
+        , funVals = 
             Map.fromList
               [ (f, VecFun f (replicate ar [0 .. numBits - 1]))
-              | (f, ar) <- Map.toList $ getArities  exprs 
+              | (f, ar) <- Map.toList $ getArities (pfunApps exprs) 
               ]
         , universalVars = vars
         , existentialVars = []

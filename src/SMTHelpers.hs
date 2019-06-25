@@ -40,25 +40,27 @@ newtype Fun = Fun
   } deriving (Eq, Ord, Show, Read)
 
 newtype BitVector_ a = BitVector
-  { bitList :: [a]
+  { bitList :: a
   } deriving (Functor, Traversable, Foldable, Eq, Ord)
 
 type BitVector = BitVector_ SMT.SExpr
 
 instance Show BitVector where
-  show (BitVector s) = show $ toDec $ map toBit s
+  show (BitVector s) = show $ s
       -- https://stackoverflow.com/questions/5921573/convert-a-string-representing-a-binary-number-to-a-base-10-string-haskell
-    where
-      toBit (SMT.Atom "true") = '1'
-      toBit (SMT.Atom "false") = '0'
-      toDec :: String -> Int
-      toDec = List.foldl' (\acc x -> acc * 2 + digitToInt x) 0
+    -- where
+    --   toBit (SMT.Atom "true") = '1'
+    --   toBit (SMT.Atom "false") = '0'
+    --   toDec :: String -> Int
+    --   toDec = List.foldl' (\acc x -> acc * 2 + digitToInt x) 0
 
--- nameToBits :: Int -> String -> BitVector
-nameToBits nintegral s =
-  BitVector $ [SMT.Atom (s ++ "-" ++ show i) | i <- [0 .. n - 1]]
-  where
-    n = fromIntegral nintegral
+
+nameToBits :: i -> String -> BitVector
+nameToBits _ str = BitVector $ SMT.Atom str
+-- nameToBits nintegral s =
+--   BitVector $ [SMT.Atom (s ++ "-" ++ show i) | i <- [0 .. n - 1]]
+--   where
+--     n = fromIntegral nintegral
 
 -- nameToBitNames :: Int -> String -> [String]
 nameToBitNames nintegral s = [(s ++ "-" ++ show i) | i <- [0 .. n - 1]]
@@ -72,14 +74,13 @@ funToBitFuns n f = map Fun $ nameToBitNames n (vecFunName f)
 (Fun f) $$ args = SMT.List (SMT.Atom f : args)
 
 ($$$) :: Fun -> [BitVector] -> SMT.SExpr
-(Fun f) $$$ args = case concatMap bitList args of
-  [] -> SMT.Atom f
-  l -> SMT.List (SMT.Atom f : l)
+(Fun f) $$$ [] = SMT.Atom f
+(Fun f) $$$ args = SMT.List (SMT.Atom f : map bitList args)
 
 --map SMT.List $ List.transpose ((unwrap $ nameToBits n vf) : map unwrap args)
 bvApply :: Integral i => i -> VecFun -> [BitVector] -> BitVector
-bvApply n vf args =
-  BitVector $ bvApplyHelper (funToBitFuns n vf) (map bitList args)
+bvApply n (VecFun f n') args  =
+  BitVector $  (Fun f) $$$ args
 
 -- bvMap :: Integral i => i -> Fun -> [BitVector] -> [SMT.SExpr]
 -- bvMap n f args = bvApplyHelper (replicate (fromIntegral n) f) (map unwrap args)
@@ -87,7 +88,7 @@ bvApplyHelper fs [] = map ($$ []) fs
 bvApplyHelper fs args = map (\x -> (\f x -> f $$ concat x) x args) fs
 
 vecEq :: BitVector -> BitVector -> SMT.SExpr
-vecEq (BitVector b1) (BitVector b2) = andAll $ zipWith SMT.eq b1 b2
+vecEq (BitVector b1) (BitVector b2) = SMT.eq b1 b2
 
 (===) = SMT.eq
 
@@ -136,16 +137,13 @@ boolToBit :: Int -> SMT.SExpr -> Integer -> SMT.SExpr
 boolToBit n b shift =
   (SMT.ite b (SMT.bvShl (SMT.bvBin n 1) (SMT.bvBin n shift)) (SMT.bvBin n 0))
 
-declareVec :: SMT.Solver -> [Char] -> [SMT.SExpr] -> IO [SMT.SExpr]
-declareVec s fullName types =
-  forM (zip (nameToBitNames (length types) fullName) types) $ \(nm, t) ->
-    SMT.declare s nm t
+declareVec :: SMT.Solver -> [Char] -> SMT.SExpr -> IO SMT.SExpr
+declareVec =
+    SMT.declare
 
 declareFunVec ::
-     SMT.Solver -> [Char] -> [SMT.SExpr] -> [SMT.SExpr] -> IO [SMT.SExpr]
-declareFunVec s fullName argTypes retTypes =
-  forM (zip (nameToBitNames (length retTypes) fullName) retTypes) $ \(nm, rtype) ->
-    SMT.declareFun s nm argTypes rtype
+     SMT.Solver -> [Char] -> [SMT.SExpr] -> SMT.SExpr -> IO SMT.SExpr
+declareFunVec  = SMT.declareFun 
 
 defineFunVec = error "TODO"
 

@@ -68,7 +68,7 @@ p e x = do
 --     -- let xi = SMT.extract x (toInteger i) (toInteger i)
 --   return $ ithBit i x n
 
-ithBit i (BitVector x) n = x !!! (fromInteger i)
+ithBit i (BitVector x) n = SMT.eq (SMT.Atom "#b1") (SMT.extract x i i)
 
 forallVar :: ConfigM BitVector
 forallVar = head <$> forallVars 1
@@ -182,4 +182,5 @@ fresh numPreds = do
       newVar = head validVars
       newState = state {existentialVars = newVar : oldVars}
   put newState
-  return $ nameToBits numPreds newVar
+  return $ BitVector $ SMT.Atom newVar 
+ 

@@ -144,10 +144,10 @@ enumerateProductions s bvType funs
      = do
       fResults <-
         forM funs $ \f ->
-          if (arity f) <= length foundVals
+          if (getArity f) <= length foundVals
             then do
               SMT.simpleCommand s ["push"]
-              let allArgNums = [0 .. (arity f) - 1]
+              let allArgNums = [0 .. (getArity f) - 1]
                   allArgNames = map argName allArgNums
             --Declare arguments for the function
               forM_ allArgNames $ \theArg -> declareVec s theArg bvType
@@ -230,6 +230,10 @@ varProductions s v i n = do
         SMT.Unsat -> return accum
         e -> error $ "TODO Failed quant " ++ show e
 
+boolToBit :: SExpr -> SExpr
+boolToBit b = SMT.ite b (SMT.Atom "#b1") (SMT.Atom "#b0")
+
+
 declareOrDefineFuns ::
      Integral t
   => SMT.Solver
@@ -237,45 +241,28 @@ declareOrDefineFuns ::
   -> SExpr
   -> PredNumConfig
   -> PredExprs
-  -> IO [[()]]
+  -> IO ()
 declareOrDefineFuns s numPreds bvType state exprs = do
   let funs = Map.elems $ funVals state
-  forM funs $ \f -> do
-    let allArgNums = [0 .. (arity f) - 1]
+  forM funs $ \f@(VecFun fName arity) -> do
+    let allArgNums = [0 .. arity - 1]
     let allArgNames = map (\arg -> ("f-arg-" ++ show arg)) allArgNums
     let allArgs =
           map (\arg -> nameToBits numPreds $ ("f-arg-" ++ show arg)) allArgNums
-    let funBitNames = funToBitFuns numPreds f 
-    let bitFor expr =  (predNums state) Map.! expr
-    let funFor e =
-          case fromIntegral i < length funBitNames of
-            True -> (funBitNames !!! (fromIntegral i))
-          where
-            i = bitFor e
-    let canDefine expr =
-          case expr of
-            (PVar _) -> False
-            _ -> True
-        (toDefine, toDeclare) = partition canDefine exprs
-    --Define the ith-bit functions for our constructor when we can
-    --Otherwise, just declare them
-    forM_ toDeclare $ \expr
-      --TODO put back define case?
-      -- putStrLn $ "Declaring SCC" ++ show (flattenSCC scc) ++ "for " ++ show f
-     ->
-      case expr of
-        (PVar v) -> do
-          declareFun
-            s
-            (funFor expr)
-            (replicate (arity f) bvType)
-            SMT.tBool
-          return ()
-    forM toDefine $ \expr
-      -- putStrLn $ "Defining SCC" ++ show (flattenSCC scc) ++ "for " ++ show f
-     -> do
-          let (PFunApp g gargs) = expr
-          let funBody =
+    --Declare a function that computes the function for each variable bit of the vector
+    let varFun = Fun (fName ++ "-vars")
+    let numVars = (length $ pvars exprs)
+    declareFun
+      s
+      varFun
+      (replicate (getArity f) $ makeBvType numVars )
+      SMT.tBool
+    --Define the function that computes the function for each bit corresponding
+    --to a constructor application
+    let funBodies = 
+          (flip map) (pfunApps exprs) $ \(PFunApp (g, gargs)) ->
+            let 
+              bexp =
                 case vecFunName f == g of
                   -- e1 `Union` e2 ->
                   --   ((funFor e1) $$$ allArgs) \/ ((funFor e2) $$$ allArgs)
@@ -290,13 +277,16 @@ declareOrDefineFuns s numPreds bvType state exprs = do
                   False -> SMT.bool False
                   -- Top -> SMT.bool True
                   -- Bottom -> SMT.bool False
-          let argPairs =
-                concatMap
-                  (\argName ->
-                     zip [argName] [bvType])
-                  allArgNames
-          defineFun s (funFor expr) argPairs SMT.tBool funBody
-          return ()
+              in 
+                boolToBit bexp
+    let argPairs = 
+          concatMap
+            (\argName ->
+              zip [argName] [bvType])
+            allArgNames
+    --Define the overall function by concatenating the unknowns with the known values
+    defineFun s (Fun fName) argPairs SMT.tBool (SMT.concat (varFun $$$ allArgs) (SMT.List $ (SMT.Atom "bvor") : funBodies))
+  return ()
 
 declareDomain ::
      Integral t => SMT.Solver -> t -> SExpr -> SExpr -> [Char] -> IO SExpr
@@ -332,7 +322,7 @@ declareDomain s numPreds bvType boolDomPreds boolDomArgName
 -- equalityClasses :: [Constr] -> [Expr] -> [SCC Expr]
 -- equalityClasses constrs exprs = sortedSCCs
 --   where
---     edges =
+--     edges = 
 --       [(e1, e1, List.nub [e2 | Sub e e2 <- constrs, e == e1]) | e1 <- exprs]
 --     sortWithinSCC (AcyclicSCC e) = AcyclicSCC e
 --     sortWithinSCC (CyclicSCC l) = CyclicSCC $ sortWith exprInt l
@@ -361,7 +351,7 @@ makePred s options litVarFor litList
       bvType = makeBvType numPreds
       vars =
         map (\i -> nameToBits numPreds $ "y_univ_" ++ show i) [1 .. numForall] 
-      state0 = (initialState numPreds vars (Maybe.mapMaybe toPredExpr subExprs) $ map (\x -> [x]) eqClasses)
+      state0 = (initialState numPreds vars eqClasses )
       
       funs :: [VecFun] = Map.elems $ funVals state0
       eqClasses = toPredExprs subExprs -- equalityClasses clist subExprs --TODO: bring this back?

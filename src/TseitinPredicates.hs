@@ -80,7 +80,7 @@ forallVars n = gets (take n . universalVars)
 differentFuns :: VecFun -> ConfigM [(VecFun, Int)]
 differentFuns f = do
   funMap <- gets funVals
-  return [(g, arity g) | g <- Map.elems funMap, vecFunName g /= vecFunName f]
+  return [(g, getArity g) | g <- Map.elems funMap, vecFunName g /= vecFunName f]
 
 funNamed :: String -> ConfigM VecFun
 funNamed f = do
@@ -153,7 +153,7 @@ negConstrClause litVarFor numPreds l@(Literal (e1, e2)) = do
 funClause :: VecFun -> ConfigM SMT.SExpr
 funClause f = do
   n <- getNumPreds
-  xs <- forallVars $ arity f
+  xs <- forallVars $ getArity f
   let fxs = bvApply n f xs
   return $ domain $$$ [fxs]
 
@@ -166,8 +166,8 @@ initialState numBits vars exprs  =
         , configNumPreds = numPreds
         , funVals = 
             Map.fromList
-              [ (f, VecFun f (replicate ar [0 .. numBits - 1]))
-              | (f, ar) <- Map.toList $ getArities (pfunApps exprs) 
+              [ (f, VecFun f arity)
+              | (f, arity) <- Map.toList $ getArities (pfunApps exprs) 
               ]
         , universalVars = vars
         , existentialVars = []

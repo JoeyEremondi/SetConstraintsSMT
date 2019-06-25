@@ -16,14 +16,14 @@ import ArgParse
 
 data VecFun = VecFun
   { vecFunName :: String
-  , argUsedBits :: [[Int]]
+    , getArity :: Int
   } deriving (Eq, Ord, Read)
 
 instance Show VecFun where
   show = vecFunName
 
-arity :: VecFun -> Int
-arity = length . argUsedBits
+-- arity :: VecFun -> Int
+-- arity = length . argUsedBits
 
 defineFun s (Fun f) = SMT.defineFun s f
 
@@ -133,9 +133,9 @@ vshow x =
     SMT.Int i -> show i
     SMT.Other s -> sshow s
 
-boolToBit :: Int -> SMT.SExpr -> Integer -> SMT.SExpr
-boolToBit n b shift =
-  (SMT.ite b (SMT.bvShl (SMT.bvBin n 1) (SMT.bvBin n shift)) (SMT.bvBin n 0))
+-- boolToBit :: Int -> SMT.SExpr -> Integer -> SMT.SExpr
+-- boolToBit n b shift =
+--   (SMT.ite b (SMT.bvShl (SMT.bvBin n 1) (SMT.bvBin n shift)) (SMT.bvBin n 0))
 
 declareVec :: SMT.Solver -> [Char] -> SMT.SExpr -> IO SMT.SExpr
 declareVec =

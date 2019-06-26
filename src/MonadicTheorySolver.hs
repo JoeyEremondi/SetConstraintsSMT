@@ -244,7 +244,7 @@ declareOrDefineFuns ::
   -> IO ()
 declareOrDefineFuns s numPreds bvType state exprs = do
   let funs = Map.elems $ funVals state
-  forM funs $ \f@(VecFun fName arity) -> do
+  forM_ funs $ \f@(VecFun fName arity) -> do
     let allArgNums = [0 .. arity - 1]
     let allArgNames = map (\arg -> ("f-arg-" ++ show arg)) allArgNums
     let allArgs =
@@ -252,13 +252,15 @@ declareOrDefineFuns s numPreds bvType state exprs = do
     --Declare a function that computes the function for each variable bit of the vector
     let varFun = Fun (fName ++ "-vars")
     let numVars = (length $ pvars exprs)
-    declareFun
-      s
-      varFun
-      (replicate (getArity f) bvType  )
-      (makeBvType numVars)
-    --Define the function that computes the function for each bit corresponding
-    --to a constructor application
+    when (numVars > 0) $ do
+      declareFun
+        s
+        varFun
+        (replicate (getArity f) bvType  )
+        (makeBvType numVars)
+      return ()
+      --Define the function that computes the function for each bit corresponding
+      --to a constructor application
     let funBodies = 
           (flip map) (pfunApps exprs) $ \(PFunApp (g, gargs)) ->
             let 
@@ -286,7 +288,10 @@ declareOrDefineFuns s numPreds bvType state exprs = do
             allArgNames
     --Define the overall function by concatenating the unknowns with the known values
     --Z3 is right to left, because of course it is
-    defineFun s (Fun fName) argPairs bvType (concatBV (varFun $$$ allArgs) (concatBVs funBodies))
+    case (length funBodies, numVars ) of
+      (0,_) -> defineFun s (Fun fName) argPairs bvType  (varFun $$$ allArgs)
+      (_,0) -> defineFun s (Fun fName) argPairs bvType (concatBVs funBodies)
+      _ -> defineFun s (Fun fName) argPairs bvType (concatBV (varFun $$$ allArgs) (concatBVs funBodies))
   return ()
 
 declareDomain ::

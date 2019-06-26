@@ -157,8 +157,8 @@ funClause f = do
   let fxs = bvApply n f xs
   return $ domain $$$ [fxs]
 
-initialState :: Int -> [BitVector] -> PredExprs -> PredNumConfig
-initialState numBits vars exprs  =
+initialState :: [BitVector] -> PredExprs -> PredNumConfig
+initialState vars exprs  =
   let (varMap, funAppMap, numPreds) = allExprNums exprs
    in Config
         { varNums = varMap

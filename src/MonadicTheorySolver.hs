@@ -352,7 +352,7 @@ makePred s options litVarFor litList
       bvType = makeBvType numPreds
       vars =
         map (\i -> nameToBits numPreds $ "y_univ_" ++ show i) [1 .. numForall] 
-      state0 = (initialState numPreds vars eqClasses )
+      state0 = (initialState vars eqClasses )
       
       funs :: [VecFun] = Map.elems $ funVals state0
       eqClasses = toPredExprs subExprs -- equalityClasses clist subExprs --TODO: bring this back?
@@ -383,7 +383,9 @@ makePred s options litVarFor litList
           ( funDomPreds
           , andAll $ posConstrPreds {- ++ boolDomPredList -} 
           , negConstrPreds)
-  let ((funDomPreds, boolDomPreds, negPreds), state) = runState comp state0
+  let ((funDomPreds, boolDomPreds, negPreds), state) = 
+    --TODO still check if false in this case
+        if numPreds > 0 then runState comp state0 else ((SMT.bool True,SMT.bool True,[SMT.bool True]), state0)
   --Declare our domain function and its subfunctions
   log "Declaring domain"
   declareDomain s numPreds bvType boolDomPreds boolDomArgName

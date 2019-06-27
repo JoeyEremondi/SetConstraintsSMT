@@ -233,6 +233,8 @@ varProductions s v i n = do
 boolToBit :: SExpr -> SExpr
 boolToBit b = SMT.ite b (SMT.Atom "#b1") (SMT.Atom "#b0")
 
+boolToBV :: Int -> SExpr -> SExpr
+boolToBV i b = SMT.ite b (SMT.bvBin i 0) (SMT.bvBin i 1)
 
 declareOrDefineFuns ::
      Integral t
@@ -252,6 +254,7 @@ declareOrDefineFuns s numPreds bvType state exprs = do
     --Declare a function that computes the function for each variable bit of the vector
     let varFun = Fun (fName ++ "-vars")
     let numVars = (length $ pvars exprs)
+    let numFuns = (length $ pfunApps exprs)
     when (numVars > 0) $ do
       declareFun
         s
@@ -280,7 +283,7 @@ declareOrDefineFuns s numPreds bvType state exprs = do
                   -- Top -> SMT.bool True
                   -- Bottom -> SMT.bool False
               in 
-                boolToBit bexp
+                boolToBV numFuns bexp
     let argPairs = 
           concatMap
             (\argName ->

@@ -153,6 +153,7 @@ forAll typePairs body = SMT.List [SMT.Atom "forall", types, body]
     types = SMT.List $ map (\(x, y) -> SMT.List [x, y]) typePairs
 
 concatBVs :: [SMT.SExpr] -> SMT.SExpr
+concatBVs [x] = x
 concatBVs args = SMT.List $ (SMT.Atom "concat") : reverse args
 
 concatBV :: SMT.SExpr -> SMT.SExpr -> SMT.SExpr

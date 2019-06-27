@@ -169,7 +169,7 @@ makeSolver opts = do
     "cvc4-fmf" ->
       SMT.newSolver
         "cvc4"
-        ["--lang=smt2", "--incremental", "--fmf-bound", "--mbqi=default"]
+        ["--lang=smt2", "--incremental", "--finite-model-find"]
         (Just l)
     "cvc4" -> SMT.newSolver "cvc4" ["--lang=smt2", "--incremental"] (Just l)
     "boolector" ->

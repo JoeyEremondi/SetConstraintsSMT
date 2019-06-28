@@ -230,13 +230,17 @@ varProductions s v i n = do
         SMT.Unsat -> return accum
         e -> error $ "TODO Failed quant " ++ show e
 
-boolToBit :: SExpr -> SExpr
-boolToBit b = SMT.ite b (SMT.Atom "#b1") (SMT.Atom "#b0")
+-- boolToBit :: SExpr -> SExpr
+-- boolToBit b = SMT.ite b (SMT.Atom "#b1") (SMT.Atom "#b0")
 
 boolToBV :: Int -> SExpr -> SExpr
-boolToBV i (SMT.Atom "true") = (SMT.bvBin i 1)
-boolToBV i (SMT.Atom "false") = (SMT.bvBin i 0)
-boolToBV i b = SMT.ite b (SMT.bvBin i 0) (SMT.bvBin i 1)
+boolToBV i b = 
+  case SMT.sexprToVal b of
+    SMT.Bool True -> (SMT.bvBin i 1)
+    SMT.Bool False -> (SMT.bvBin i 0) 
+    _ -> SMT.ite b (SMT.bvBin i 1) (SMT.bvBin i 0)
+
+
 
 declareOrDefineFuns ::
      Integral t

@@ -161,7 +161,7 @@ concatBV s1 s2 = concatBVs_ [s1,s2]
 
 concatBits :: Int -> [SMT.SExpr] -> SMT.SExpr
 concatBits n [x] = x
-concatBits n args = SMT.List $ (SMT.Atom "bvor") : [SMT.bvShl (SMT.bvHex n i) (arg) | (arg, i) <- zip args [0..]]
+concatBits n args = SMT.List $ (SMT.Atom "bvor") : [SMT.bvShl (SMT.bvBin n i) (arg) | (arg, i) <- zip args [0..]]
 
 makeSolver opts = do
   let vb = verbose opts

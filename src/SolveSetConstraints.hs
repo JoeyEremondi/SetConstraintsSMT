@@ -53,7 +53,7 @@ solveSetConstraints s options cInitial
   --Declare our inclusion function
   --
  = do
-  let log = if (verbose options) then putStrLn else (\ _ -> return ())
+  let log = if (verbose options) then (putStrLn . (";;;; " ++ )) else (\ _ -> return ())
   log $ "cInitial: " ++ show cInitial
   SMT.simpleCommand s ["set-logic", "UF"]
   when (solver options == "z3") $ 

@@ -106,16 +106,16 @@ enumerateDomain s numPreds bvType = do
   where
     domainVal = nameToBits numPreds "domain-val"
     helper accum = do
-      putStrLn "Doing check in theory solver"
+      putStrLn ";;;; Doing check in theory solver"
       result <- SMT.check s
-      putStrLn "Done check in theory solver"
+      putStrLn ";;;; Done check in theory solver"
       case result of
         SMT.Sat -> do
           valueExpr <- getBitVec s domainVal
           SMT.assert s (SMT.not (domainVal `vecEq` valueExpr))
           helper (valueExpr : accum)
         SMT.Unsat -> return accum
-        e -> error $ "TODO Failed quant enumerating domain" ++ show e
+        e -> error $ ";;;; TODO Failed quant enumerating domain" ++ show e
 
 --To enumerate through our productions
 enumerateProductions ::
@@ -359,7 +359,7 @@ makePred ::
 makePred s options litVarFor litList
   --setOptions s
  = do
-  let log = if (verbose options) then putStrLn else (\ _ -> return ())
+  let log = if (verbose options) then (putStrLn . (";;;; " ++ )) else (\ _ -> return ())
   let subExprs = orderedSubExpressions litList
       -- (posList, negList) = List.partition isPos clist
       theMaxArity = maxArity subExprs
@@ -442,13 +442,13 @@ printAndReturnResult s options numPreds bvType state funs allFreeVars
   case getModel options of
     True -> do
       domain <- enumerateDomain s numPreds bvType
-      putStrLn $ "DOMAIN: " ++ show domain
+      putStrLn $ ";;;; DOMAIN: " ++ show domain
       prodsFrom <- enumerateProductions s bvType funs
         --TODO do based on options
       forM_ prodsFrom $ \(from, f, to) ->
         putStrLn $ show from ++ "  ->  " ++ show f ++ show to
       forM_ allFreeVars $ \v -> do
         prods <- varProductions s v ((predNums state) Map.! v) numPreds
-        forM prods $ \prod -> putStrLn $ varName v ++ "  ->  " ++ (show prod)
+        forM prods $ \prod -> putStrLn $ ";;;; " ++ varName v ++ "  ->  " ++ (show prod)
     False -> return ()
   return $ Right $ error "TODO " --() --TODO return solution

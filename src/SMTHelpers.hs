@@ -159,9 +159,9 @@ concatBVs_ args = SMT.List $ (SMT.Atom "concat") : reverse args
 concatBV :: SMT.SExpr -> SMT.SExpr -> SMT.SExpr
 concatBV s1 s2 = concatBVs_ [s1,s2] 
 
-concatBits :: [SMT.SExpr] -> SMT.SExpr
-concatBits [x] = x
-concatBits args = SMT.List $ (SMT.Atom "bvor") : [SMT.bvShl (SMT.int i) (arg) | (arg, i) <- zip args [0..]]
+concatBits :: Int -> [SMT.SExpr] -> SMT.SExpr
+concatBits n [x] = x
+concatBits n args = SMT.List $ (SMT.Atom "bvor") : [SMT.bvShl (SMT.bvHex n i) (arg) | (arg, i) <- zip args [0..]]
 
 makeSolver opts = do
   let vb = verbose opts

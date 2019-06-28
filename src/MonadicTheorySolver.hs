@@ -291,8 +291,8 @@ declareOrDefineFuns s numPreds bvType state exprs = do
     --Z3 is right to left, because of course it is
     case (length funBodies, numVars ) of
       (0,_) -> defineFun s (Fun fName) argPairs bvType  (varFun $$$ allArgs)
-      (_,0) -> defineFun s (Fun fName) argPairs bvType (concatBits funBodies)
-      _ -> defineFun s (Fun fName) argPairs bvType (concatBV (varFun $$$ allArgs) (concatBits funBodies))
+      (_,0) -> defineFun s (Fun fName) argPairs bvType (concatBits numFuns funBodies)
+      _ -> defineFun s (Fun fName) argPairs bvType (concatBV (varFun $$$ allArgs) (concatBits numFuns funBodies))
   return ()
 
 declareDomain ::

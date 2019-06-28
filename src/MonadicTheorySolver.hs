@@ -234,6 +234,8 @@ boolToBit :: SExpr -> SExpr
 boolToBit b = SMT.ite b (SMT.Atom "#b1") (SMT.Atom "#b0")
 
 boolToBV :: Int -> SExpr -> SExpr
+boolToBV i (SMT.Atom "true") = (SMT.bvBin i 1)
+boolToBV i (SMT.Atom "false") = (SMT.bvBin i 0)
 boolToBV i b = SMT.ite b (SMT.bvBin i 0) (SMT.bvBin i 1)
 
 declareOrDefineFuns ::
@@ -266,24 +268,20 @@ declareOrDefineFuns s numPreds bvType state exprs = do
       --to a constructor application
     let funBodies = 
           (flip map) (pfunApps exprs) $ \(PFunApp (g, gargs)) ->
-            let 
-              bexp =
-                case vecFunName f == g of
+            case vecFunName f == g of
                   -- e1 `Union` e2 ->
                   --   ((funFor e1) $$$ allArgs) \/ ((funFor e2) $$$ allArgs)
                   -- e1 `Intersect` e2 ->
                   --   (funFor e1 $$$ allArgs) /\ ((funFor e2) $$$ allArgs)
                   -- Neg e1 -> SMT.not ((funFor e1) $$$ allArgs)
                   True ->
-                      andAll $
+                      boolToBV numFuns $ andAll $
                       map
                         (\(setArg, argVal) -> pSMT state setArg argVal)
                         (zip gargs allArgs)
-                  False -> SMT.bool False
+                  False -> SMT.bvBin numFuns 0
                   -- Top -> SMT.bool True
                   -- Bottom -> SMT.bool False
-              in 
-                boolToBV numFuns bexp
     let argPairs = 
           concatMap
             (\argName ->

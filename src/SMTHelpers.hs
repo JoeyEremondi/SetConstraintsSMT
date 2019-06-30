@@ -9,7 +9,8 @@ import Syntax
 import Control.Monad
 import Data.Char (digitToInt)
 import qualified Data.List as List
-import qualified SimpleSMT as SMT
+import qualified Data.SBV as SMT
+import Data.SBV (SBool, Symbolic, STuple)
 import ArgParse
 
 
@@ -25,23 +26,24 @@ instance Show VecFun where
 arity :: VecFun -> Int
 arity = length . argUsedBits
 
-defineFun s (Fun f) = SMT.defineFun s f
+-- defineFun s (Fun f) = SMT.defineFun s f
 
-declareFun s (Fun f) = SMT.declareFun s f
+-- declareFun s (Fun f) = SMT.declareFun s f
 
-getBitVec :: SMT.Solver -> BitVector -> IO BitVector
-getBitVec s bv =
-  forM bv $ \bit -> do
-    v <- SMT.getExpr s bit
-    return $ SMT.value v
+-- getBitVec :: SMT.Solver -> BitVector -> IO BitVector
+-- getBitVec s bv =
+--   forM bv $ \bit -> do
+--     v <- SMT.getExpr s bit
+--     return $ SMT.value v
 
 newtype Fun = Fun
   { unFun :: String
   } deriving (Eq, Ord, Show, Read)
 
-newtype BitVector_ a = BitVector
-  { bitList :: [a]
-  } deriving (Functor, Traversable, Foldable, Eq, Ord)
+data BitVector_ a = BitVector
+  BVOne  SBool
+  | BVCons  STuple SBool (BitVector_ a)
+  deriving (Symbolic, Functor, Traversable, Foldable, Eq, Ord)
 
 type BitVector = BitVector_ SMT.SExpr
 

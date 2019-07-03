@@ -69,8 +69,8 @@ nameToBitNames nintegral s = [(s ++ "-" ++ show i) | i <- [0 .. n - 1]]
 
 -- funToBitFuns n f = map Fun $ nameToBitNames n (vecFunName f)
 
-($$) :: (Z3.MonadZ3 z3) => Z3.FuncDecl -> [Z3.AST] -> z3 Z3.AST
-($$) = Z3.mkApp
+($$) :: (Z3.MonadZ3 z3) => Z3.FuncDecl -> [BitVector] -> z3 Z3.AST
+f $$ bv = Z3.mkApp f (concatMap bitList bv) 
 -- ($$) :: Z3.FuncDecl -> [Z3.AST] -> z3 Z3.AST
 -- (Fun f) $$ [] = (SMT.Atom f)
 -- (Fun f) $$ args = SMT.List (SMT.Atom f : args)
@@ -81,8 +81,8 @@ nameToBitNames nintegral s = [(s ++ "-" ++ show i) | i <- [0 .. n - 1]]
 --   l -> SMT.List (SMT.Atom f : l)
 
 --map SMT.List $ List.transpose ((unwrap $ nameToBits n vf) : map unwrap args)
-bvApply :: (Z3.MonadZ3 z3) => VecFun -> [BitVector] -> z3 BitVector
-bvApply vf args = do
+($$$) :: (Z3.MonadZ3 z3) => VecFun -> [BitVector] -> z3 BitVector
+vf $$$ args = do
   let argsList = concatMap bitList args
   retBits <- forM (componentFuns vf) $ \ f -> Z3.mkApp f argsList
   return $ BitVector retBits
@@ -95,13 +95,38 @@ bvApplyHelper fs args = map (\x -> (\f x -> f $$ concat x) x args) fs
 -- vecEq :: BitVector -> BitVector -> Z3.AST
 vecEq (BitVector b1) (BitVector b2) = Z3.mkAnd <$> zipWithM (===) b1 b2
 
+(===) :: (Z3.MonadZ3 z3) => Z3.AST -> Z3.AST -> z3 Z3.AST
 a === b = Z3.mkEq a b
 
+(/\) :: (Z3.MonadZ3 z3) => Z3.AST -> Z3.AST -> z3 Z3.AST
 a /\ b = Z3.mkAnd [a,b]
 
+(\/) :: (Z3.MonadZ3 z3) => Z3.AST -> Z3.AST -> z3 Z3.AST
 a \/ b = Z3.mkOr [a,b]
 
+(==>) :: (Z3.MonadZ3 z3) => Z3.AST -> Z3.AST -> z3 Z3.AST
 a ==> b = Z3.mkImplies a b
+
+(.===) :: (Z3.MonadZ3 z3) => z3 Z3.AST -> z3 Z3.AST -> z3 Z3.AST
+ma .=== mb = do
+  a <- ma
+  b <- mb 
+  Z3.mkEq a b
+
+(./\) :: (Z3.MonadZ3 z3) => z3 Z3.AST -> z3 Z3.AST -> z3 Z3.AST
+a ./\ b = Z3.mkAnd =<< (sequence [a,b])
+
+(.\/) :: (Z3.MonadZ3 z3) => z3 Z3.AST -> z3 Z3.AST -> z3 Z3.AST
+a .\/ b = Z3.mkOr =<< (sequence [a,b])
+
+mNot :: (Z3.MonadZ3 z3) => z3 Z3.AST -> z3 Z3.AST
+mNot b = Z3.mkNot =<< b
+
+(.==>) :: (Z3.MonadZ3 z3) => z3 Z3.AST -> z3 Z3.AST -> z3 Z3.AST
+ma .==> mb = do
+  a <- ma
+  b <- mb 
+  Z3.mkImplies a b
 
 --tString = SMT.Atom "String"
 --tList t = "List" $$ [t]

@@ -3,7 +3,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 
 module Syntax where
-
+ 
 import Control.Monad.State
 import qualified Data.Data as Data
 import Data.List as List

@@ -1,14 +1,19 @@
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
+
 module TseitinPredicates where
 
 import SMTHelpers
-import qualified SimpleSMT as SMT hiding (bvBin, tBits)
+import qualified Z3.Monad as Z3
 import Syntax
 
 import Control.Monad.State
 import qualified Data.Data as Data
 import qualified Data.List 
 import qualified Data.Map as Map
-import Data.Map ((!))
+import Data.Map ((!)) 
 import qualified Data.Maybe as Maybe
 
 import Data.Char (isAlphaNum)
@@ -17,11 +22,11 @@ import qualified Data.Set as Set
 import Data.Graph
 import Debug.Trace (trace)
 
-domain = Fun "domain"
+-- domain = Fun "domain"
 
-booleanDomain = Fun "booleanDomain"
+-- booleanDomain = Fun "booleanDomain"
 
-funDomain = Fun "functionDomain"
+-- funDomain = Fun "functionDomain"
 
 -- type SBVec = SMT.BitVec
 data PredNumConfig = Config
@@ -30,12 +35,17 @@ data PredNumConfig = Config
   , funVals :: Map.Map String VecFun
   , universalVars :: [BitVector]
   , existentialVars :: [String]
+  , domain :: Z3.FuncDecl
+  , booleanDomain :: Z3.FuncDecl
+  , funDomain :: Z3.FuncDecl
   }
 
 getNumPreds :: ConfigM Int
 getNumPreds = gets configNumPreds
 
-type ConfigM = State PredNumConfig
+data ConfigM a = ConfigM (StateT PredNumConfig (Z3.Z3) a)
+  deriving (Functor, Applicative, Monad, MonadIO, Z3.MonadZ3, MonadState PredNumConfig)
+
 
 getAllFunctions :: ConfigM [VecFun]
 getAllFunctions = gets (Map.elems . funVals)
@@ -43,25 +53,25 @@ getAllFunctions = gets (Map.elems . funVals)
 --Generate a function that takes a bit-vector x
 --and returns the SMT expression representing P_e(x)
 --
-pSMT :: PredNumConfig -> Expr -> BitVector -> SMT.SExpr
+pSMT :: (Z3.MonadZ3 z3) => PredNumConfig -> Expr -> BitVector -> z3 Z3.AST
 pSMT config e x = 
   case e of
     (Var e) ->
       let i = (predNums config) Map.! (PVar e)
-      in ithBit i x (configNumPreds config)
+      in return $ ithBit i x (configNumPreds config)
     (FunApp e1 e2) -> 
       let i = (predNums config) Map.! (PFunApp e1 e2)
-      in ithBit i x (configNumPreds config)
-    (Union e1 e2) -> (pSMT config e1 x) \/ (pSMT config e2 x)
-    (Intersect e1 e2) -> (pSMT config e1 x) /\ (pSMT config e2 x)
-    (Neg e) -> SMT.not (pSMT config e x)
-    Top -> SMT.bool True
-    Bottom -> SMT.bool False
+      in return $ ithBit i x (configNumPreds config)
+    (Union e1 e2) -> (pSMT config e1 x) .\/ (pSMT config e2 x)
+    (Intersect e1 e2) -> (pSMT config e1 x) ./\ (pSMT config e2 x)
+    (Neg e) -> mNot (pSMT config e x)
+    Top -> Z3.mkTrue
+    Bottom -> Z3.mkFalse
 
-p :: Expr -> BitVector -> ConfigM SMT.SExpr
+p :: Expr -> BitVector -> ConfigM Z3.AST
 p e x = do
   config <- get
-  return $ pSMT config e x 
+  pSMT config e x 
 -- p e x = do
 --   n <- getNumPreds
 --   i <- gets ((Map.! e) . predNums)
@@ -86,7 +96,7 @@ funNamed f = do
   funs <- gets funVals
   return $ funs Map.! f
 
--- functionDomainClause :: Expr -> ConfigM SMT.SExpr
+-- functionDomainClause :: Expr -> ConfigM Z3.AST
 -- functionDomainClause e = do
 --   n <- getNumPreds
 --   case e of
@@ -108,78 +118,69 @@ funNamed f = do
 --       return $ eqCond /\ andAll neqConds
 --     _ -> return $ SMT.bool True
 
-booleanDomainClause :: BitVector -> Expr -> ConfigM SMT.SExpr
+booleanDomainClause :: BitVector -> Expr -> ConfigM Z3.AST
 booleanDomainClause x e =
   case e of
-    Var _ -> return $ SMT.bool True
-    Neg e2 -> do
-      pe <- p e x
-      pe2 <- p e2 x
-      return $ pe === (SMT.not pe2)
+    Var _ -> Z3.mkTrue
+    Neg e2 -> 
+      (p e x) .=== (mNot $ p e2 x)
     Union a b -> do
-      pe <- p e x
-      pa <- p a x
-      pb <- p b x
-      return $ pe === (pa \/ pb)
+      (p e x) .=== (p a x .\/ p b x)
     Intersect a b -> do
-      pe <- p e x
-      pa <- p a x
-      pb <- p b x
-      return $ pe === (pa /\ pb)
+      (p e x) .=== (p a x ./\ p b x)
     Top -> p e x
     Bottom -> do
-      px <- p e x
-      return $ SMT.not px
-    _ -> return $ SMT.bool True
+      mNot $ p e x
+    _ -> Z3.mkTrue
 
-posConstrClause :: (Literal -> SMT.SExpr) -> BitVector -> Literal -> ConfigM SMT.SExpr
-posConstrClause litVarFor x l@(Literal (e1, e2)) = do
-  pe1 <- p e1 x
-  pe2 <- p e2 x
-  return $ (litVarFor l ==> (pe1 ==> pe2))
+posConstrClause :: (Literal -> Z3.AST) -> BitVector -> Literal -> ConfigM Z3.AST
+posConstrClause litVarFor x l@(Literal (e1, e2)) = 
+  (return $ litVarFor l) .==> (p e1 x .==> p e2 x)
 
-negConstrClause :: Integral i => (Literal -> SMT.SExpr) -> i -> Literal -> ConfigM SMT.SExpr
+negConstrClause :: Integral i => (Literal -> Z3.AST) -> i -> Literal -> ConfigM Z3.AST
 negConstrClause litVarFor numPreds l@(Literal (e1, e2)) = do
   x <- fresh numPreds
   pe1 <- p e1 x
   pe2 <- p e2 x
   --Assert that each existential variable is in our domain
-  let inDomain = domain $$$ [x]
+  domainFun <- gets domain
+  
   --And that it satisfies P_e1 and not P_e2 (i.e. e1 contains an element not in e2, i.e. e1 not subset of e2)
-  return $ (SMT.not  $ litVarFor l) ==> (inDomain /\ pe1 /\ (SMT.not pe2))
+  (Z3.mkNot  $ litVarFor l) .==> ((domainFun $$ [x]) ./\ (p e1 x) ./\ (mNot $ p e2 x))
 
 --Assert that the given function is closed over the domain
-funClause :: VecFun -> ConfigM SMT.SExpr
+funClause :: VecFun -> ConfigM Z3.AST
 funClause f = do
   n <- getNumPreds
   xs <- forallVars $ arity f
-  let fxs = bvApply n f xs
-  return $ domain $$$ [fxs]
+  fxs <-  f $$$ xs
+  domainFun <- gets domain
+  domainFun $$ [fxs]
 
-initialState :: Int -> [BitVector] -> [PredExpr] -> [[PredExpr]] -> PredNumConfig
-initialState numBits vars exprs connComps =
+initialState :: (Z3.MonadZ3 z3 ) => Int -> [BitVector] -> [PredExpr] -> [[PredExpr]] -> z3 PredNumConfig
+initialState numBits vars exprs connComps = do
   let (predMap, numPreds) = allExprNums connComps
-   in Config
+  let arities = Map.toList $ getArities  exprs
+  funcDeclList <- forM arities $ \(f,ar) -> do
+      bl <- Z3.mkBoolSort
+      decls <- 
+        forM [1 .. numBits] $ \bitnum -> 
+            Z3.mkFreshFuncDecl (show f ++ "_" ++  "_ " ++ show bitnum ) (replicate (ar*numBits) bl) bl
+      return _
+  let funValList = [ (f, VecFun f ar decls)
+              | (f, ar, decls) <- funcDeclList  
+              ]
+  return $ Config
         { predNums = predMap
         , configNumPreds = numPreds
         , funVals =
-            Map.fromList
-              [ (f, VecFun f (replicate ar [0 .. numBits - 1]))
-              | (f, ar) <- Map.toList $ getArities  exprs 
-              ]
+            Map.fromList funValList
         , universalVars = vars
         , existentialVars = []
         }
 
 fresh :: Integral i => i -> ConfigM BitVector
 fresh numPreds = do
-  state <- get
-  n <- getNumPreds
-  let oldVars = existentialVars state
-      takenVars = Set.fromList oldVars
-      varNames = map (\i -> "x_exists_" ++ show i) [0 ..]
-      validVars = filter (\x -> not $ x `Set.member` takenVars) varNames
-      newVar = head validVars
-      newState = state {existentialVars = newVar : oldVars}
-  put newState
-  return $ nameToBits numPreds newVar
+  bl <- Z3.mkBoolSort 
+  bits <- forM [1 .. numPreds] $ \_ -> Z3.mkFreshConst "x_exists" bl
+  return $ BitVector bits

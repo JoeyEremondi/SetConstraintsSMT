@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DeriveAnyClass #-}
@@ -12,6 +13,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module SMTHelpers where
 
@@ -72,24 +74,23 @@ newtype Fun = Fun
   } deriving (Eq, Ord, Show, Read)
 
 
-class (SymVal a, SMT.EqSymbolic a) => Vec a (n :: Nat) v | a n -> v where
+type family Vec a (n :: Nat) ::  * where
+  Vec a Z = a
+  Vec a (S n) = (a, Vec a n)
 
-instance (SymVal a, SMT.EqSymbolic a) => (Vec a Z (SBV a) ) where 
-
-instance (SymVal a, SMT.EqSymbolic a, SymVal v, Vec a n v) => Vec a (S n) (STuple a v)
+type SVec a n = SBV (Vec a n)
 
 
 
-data BitVector n = forall v . (Vec Bool n v) => BitVector v
-data FunArgs arity n = forall vout vin . (Vec Bool n vin, Vec vin n vout) => FunArgs vout
+
+type BitVector n = SVec Bool n 
+type FunArgs arity n = SVec (SVec Bool n) arity
 type Constructor arity n = FunArgs arity n -> BitVector n
 type InDomain n = (BitVector n) -> SBool
 
-data EBitVector = forall n . EBitVector (BitVector n)
-data EFunArgs = forall arity n . EFunArgs (FunArgs arity n)
 
 sbCons :: SBool -> BitVector n -> BitVector (S n)
-sbCons b (BitVector v) = BitVector _ 
+sbCons b v = _ 
 
 
 -- makeBitVector :: [SBool] -> EBitVector 

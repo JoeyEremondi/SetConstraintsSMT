@@ -18,7 +18,7 @@ library
   exposed-modules: SetConstraints.Solve
   other-modules:     Syntax, SMTHelpers, TseitinPredicates, MonadicTheorySolver, SolveSetConstraints, TreeGrammar, ArgParse, Andersen
   build-depends:       base,
-                       simple-smt,
+                       z3,
                        mtl,
                        containers,
                        optparse-applicative,
@@ -32,10 +32,9 @@ executable set-constraint-solver
   other-modules:     Syntax, SMTHelpers, TseitinPredicates, MonadicTheorySolver, SolveSetConstraints, TreeGrammar, ArgParse, Andersen
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       
-                       simple-smt,
+                       z3,
                        optparse-applicative,
                        base,
-                       simple-smt,
                        mtl,
                        containers,
                        optparse-applicative,

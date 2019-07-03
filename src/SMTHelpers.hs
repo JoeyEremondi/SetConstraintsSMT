@@ -1,6 +1,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
 
 module SMTHelpers where
 
@@ -36,25 +38,45 @@ arity = length . argUsedBits
 --     v <- SMT.getExpr s bit
 --     return $ SMT.value v
 
+data Nat = 
+  Z | S Nat
+
+data SNat :: Nat -> * where
+  SZ :: SNat Z
+  SS :: SNat n -> SNat (S n)
+
+data ENat where
+  ENat :: SNat n -> ENat
+
+toENat :: Integer -> ENat
+toENat 0 = ENat (SZ)
+toENat sn = ENat (SS sn)
+  where n = sn - 1
+        (ENat en) = toENat n
+         
+
 newtype Fun = Fun
   { unFun :: String
   } deriving (Eq, Ord, Show, Read)
 
-data BitVector_ a = BitVector
-  BVOne  SBool
-  | BVCons  STuple SBool (BitVector_ a)
+data Vec :: * -> Nat -> * where
+  VOne :: (SMT.SymVal a) => a -> Vec a Z
+  VCpms :: (SMT.SymVal a) => a -> (Vec a n) -> Vec a (S n)
   deriving (Symbolic, Functor, Traversable, Foldable, Eq, Ord)
 
-type BitVector = BitVector_ SMT.SExpr
+type BitVector n = Vec SBool n
+type FunArgs arity n = Vec (BitVector n) arity
+type Constructor arity n = FunArgs arity n -> BitVector n
+type InDomain n = (BitVector n) -> SBool
 
-instance Show BitVector where
-  show (BitVector s) = show $ toDec $ map toBit s
-      -- https://stackoverflow.com/questions/5921573/convert-a-string-representing-a-binary-number-to-a-base-10-string-haskell
-    where
-      toBit (SMT.Atom "true") = '1'
-      toBit (SMT.Atom "false") = '0'
-      toDec :: String -> Int
-      toDec = List.foldl' (\acc x -> acc * 2 + digitToInt x) 0
+-- instance Show BitVector where
+--   show (BitVector s) = show $ toDec $ map toBit s
+--       -- https://stackoverflow.com/questions/5921573/convert-a-string-representing-a-binary-number-to-a-base-10-string-haskell
+--     where
+--       toBit (SMT.Atom "true") = '1'
+--       toBit (SMT.Atom "false") = '0'
+--       toDec :: String -> Int
+--       toDec = List.foldl' (\acc x -> acc * 2 + digitToInt x) 0
 
 -- nameToBits :: Int -> String -> BitVector
 nameToBits nintegral s =

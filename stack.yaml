@@ -3,4 +3,6 @@ extra-package-dbs: []
 packages:
 - .
 extra-deps:
-resolver: lts-11.22
+  - sbv-8.3
+  - crackNum-2.3
+resolver: lts-12.26

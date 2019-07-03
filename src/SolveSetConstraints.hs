@@ -9,7 +9,7 @@ import qualified Data.Set as Set
 import qualified MonadicTheorySolver as Solver
 import Numeric (showIntAtBase)
 import SMTHelpers
-import qualified SimpleSMT as SMT
+import qualified Data.SBV as SMT
 import Syntax
 
 import Data.Either (rights)

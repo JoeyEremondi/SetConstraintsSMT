@@ -119,8 +119,8 @@ orderedSubExpressions litList =
     edges = map (\(e, es) -> (e, exprNum e, map exprNum es)) pairs
     (g, unVertex, unKey) = Graph.graphFromEdges edges
     topologicalOrder = Graph.topSort g
-
-allExprNums :: [[PredExpr]] -> (Map.Map PredExpr Integer, Int)
+ 
+allExprNums :: [[PredExpr]] -> (Map.Map PredExpr Int, Int)
 allExprNums sccList =
   let sccPairs = zip sccList [0 ..]
       exprPairs = [(e, num) | (elist, num) <- sccPairs, e <- elist]

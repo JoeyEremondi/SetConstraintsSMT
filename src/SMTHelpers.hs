@@ -35,16 +35,16 @@ import Data.SBV.Tuple (tuple)
 import Data.Constraint (Dict(..))
 
 
-data VecFun = VecFun
-  { vecFunName :: String
-  , argUsedBits :: [[Int]]
-  } deriving (Eq, Ord, Read)
+-- data VecFun = VecFun
+--   { vecFunName :: String
+--   , argUsedBits :: [[Int]]
+--   } deriving (Eq, Ord, Read)
 
-instance Show VecFun where
-  show = vecFunName
+-- instance Show VecFun where
+--   show = vecFunName
 
-arity :: VecFun -> Int
-arity = length . argUsedBits
+-- arity :: VecFun -> Int
+-- arity = length . argUsedBits
 
 -- defineFun s (Fun f) = SMT.defineFun s f
 
@@ -63,13 +63,23 @@ data SNat :: Nat -> * where
   SZ :: SNat Z
   SS :: SNat n -> SNat (S n)
 
+sNatToInt :: forall n . SNat n -> Int
+sNatToInt sn = helper sn 0
+  where 
+    helper :: forall n . SNat n -> Int -> Int
+    helper SZ i = i
+    helper ssn@(SS sn) i =
+      case ssn of
+        (_ :: SNat (S n')) -> 
+          helper @n' sn (1+i)
+
 data ENat where
   ENat :: SNat n -> ENat
 
 eSucc :: ENat -> ENat
 eSucc (ENat s) = ENat (SS s)
 
-toENat :: Integer -> ENat
+toENat :: Int -> ENat
 toENat 0 = ENat (SZ)
 toENat sn = eSucc (toENat n)
   where n = sn - 1
@@ -113,13 +123,15 @@ makeSVec ss@(SS npred) (first:rest) =
         (vecRest, Dict) -> tuple (first, vecRest) 
 
 type BitVector n = SVec Bool n 
-type FunArgs arity n = SVec (SVec Bool n) arity
+type FunArgs arity n = SVec (Vec Bool n) arity
 type Constructor arity n = FunArgs arity n -> BitVector n
 type InDomain n = (BitVector n) -> SBool
 
+data VecFun :: Nat -> * where
+  VecFun :: forall arity n . String -> SNat arity -> Constructor arity n -> VecFun n
 
-  
-
+arity (VecFun _ sn _) = sNatToInt sn
+vecFunName (VecFun name _ _) = name
 
 -- makeBitVector :: [SBool] -> EBitVector 
 -- makeBitVector [e] = EBitVector $ (BitVector e :: BitVector Z)

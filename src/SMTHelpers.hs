@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -14,6 +15,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module SMTHelpers where
 
@@ -26,6 +28,11 @@ import qualified Data.SBV as SMT
 import Data.SBV (SymVal, SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>))
 import ArgParse
 
+import Data.Data (Data)
+
+import Data.SBV.Tuple (tuple)
+
+import Data.Constraint (Dict(..))
 
 
 data VecFun = VecFun
@@ -74,14 +81,36 @@ newtype Fun = Fun
   } deriving (Eq, Ord, Show, Read)
 
 
-type family Vec a (n :: Nat) ::  * where
+type family Vec a (n :: Nat) where
   Vec a Z = a
   Vec a (S n) = (a, Vec a n)
+  -- deriving (Read, Data, Show, SMT.HasKind, SymVal)
+
+  -- deriving (Read, Data, Show, SMT.HasKind, SymVal)
+
 
 type SVec a n = SBV (Vec a n)
 
 
+vecInstance :: forall a (n :: Nat) . (SymVal a) => SNat n -> Dict (SymVal (Vec a n))
+vecInstance sz@SZ = 
+  case sz of
+    (_ :: SNat Z) -> Dict
+vecInstance ss@(SS n) = 
+  case ss of
+    (_ :: SNat (S n')) -> 
+      case vecInstance @a @n' n of
+        Dict -> Dict 
 
+makeSVec :: forall a (n :: Nat) . (SymVal a) => SNat n -> [SBV a] -> SVec a n
+makeSVec sz@SZ [elem] = 
+  case sz of
+    (_ :: SNat Z) -> elem
+makeSVec ss@(SS npred) (first:rest) = 
+  case ss of
+    (_ :: SNat (S n')) -> 
+      case (makeSVec @a @n' npred rest, vecInstance @a @n' npred) of
+        (vecRest, Dict) -> tuple (first, vecRest) 
 
 type BitVector n = SVec Bool n 
 type FunArgs arity n = SVec (SVec Bool n) arity
@@ -89,8 +118,7 @@ type Constructor arity n = FunArgs arity n -> BitVector n
 type InDomain n = (BitVector n) -> SBool
 
 
-sbCons :: SBool -> BitVector n -> BitVector (S n)
-sbCons b v = _ 
+  
 
 
 -- makeBitVector :: [SBool] -> EBitVector 

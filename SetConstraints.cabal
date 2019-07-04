@@ -20,6 +20,7 @@ library
   build-depends:       base,
                        sbv >= 8.3,
                        crackNum >= 2.3,
+                       constraints >= 0.11,
                        mtl,
                        containers,
                        optparse-applicative,
@@ -35,6 +36,7 @@ executable set-constraint-solver
   build-depends:       
                        sbv >= 8.3,
                        crackNum >= 2.3,
+                       constraints >= 0.11,
                        optparse-applicative,
                        base,
                        mtl,

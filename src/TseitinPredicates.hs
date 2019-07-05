@@ -68,25 +68,25 @@ getAllFunctions = gets (Map.elems . funVals)
 --Generate a function that takes a bit-vector x
 --and returns the SMT expression representing P_e(x)
 --
-pSMT :: PredNumConfig n -> Expr -> BitVector n -> SBool
-pSMT config e x = 
+pSMT :: SNat n -> Map.Map PredExpr Int -> Expr -> BitVector n -> SBool
+pSMT numPreds pnums e x = 
   case e of
     (Var e) ->
-      let i = (predNums config) Map.! (PVar e)
-      in ithBit i x (configNumPreds config)
+      let i = pnums Map.! (PVar e)
+      in ithBit i x (numPreds)
     (FunApp e1 e2) -> 
-      let i = (predNums config) Map.! (PFunApp e1 e2)
-      in ithBit i x (configNumPreds config)
-    (Union e1 e2) -> (pSMT config e1 x) .|| (pSMT config e2 x)
-    (Intersect e1 e2) -> (pSMT config e1 x) .&& (pSMT config e2 x)
-    (Neg e) -> sNot (pSMT config e x)
+      let i = pnums Map.! (PFunApp e1 e2)
+      in ithBit i x (numPreds)
+    (Union e1 e2) -> (pSMT numPreds pnums e1 x) .|| (pSMT numPreds pnums e2 x)
+    (Intersect e1 e2) -> (pSMT numPreds pnums e1 x) .&& (pSMT numPreds pnums e2 x)
+    (Neg e) -> sNot (pSMT numPreds pnums e x)
     Top -> sTrue
     Bottom -> sFalse
 
 p :: Expr -> BitVector n -> ConfigM n SBool
 p e x = do
   config <- get
-  return $ pSMT config e x 
+  return $ pSMT (configNumPreds config) (predNums config) e x 
 -- p e x = do
 --   n <- getNumPreds
 --   i <- gets ((Map.! e) . predNums)

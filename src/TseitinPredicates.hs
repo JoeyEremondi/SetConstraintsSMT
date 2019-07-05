@@ -73,10 +73,10 @@ pSMT numPreds pnums e x =
   case e of
     (Var e) ->
       let i = pnums Map.! (PVar e)
-      in ithBit i x (numPreds)
+      in ithElem i x (numPreds)
     (FunApp e1 e2) -> 
       let i = pnums Map.! (PFunApp e1 e2)
-      in ithBit i x (numPreds)
+      in ithElem i x (numPreds)
     (Union e1 e2) -> (pSMT numPreds pnums e1 x) .|| (pSMT numPreds pnums e2 x)
     (Intersect e1 e2) -> (pSMT numPreds pnums e1 x) .&& (pSMT numPreds pnums e2 x)
     (Neg e) -> sNot (pSMT numPreds pnums e x)
@@ -91,18 +91,29 @@ p e x = do
 --   n <- getNumPreds
 --   i <- gets ((Map.! e) . predNums)
 --     -- let xi = SMT.extract x (toInteger i) (toInteger i)
---   return $ ithBit i x n
+--   return $ ithElem i x n
 
-ithBit :: forall n . Int -> BitVector n -> SNat n -> SBool
-ithBit 0 bv sz@SZ  = 
+ithElem :: forall a n . (SymVal a) => Int -> SVec a n -> SNat n -> SBV a
+ithElem 0 bv sz@SZ  = 
   case sz of
     (_ :: SNat Z) -> bv
-ithBit i bv ss@(SS spred) = 
+ithElem i bv ss@(SS spred) = 
   case ss of
     (_ :: SNat (S npred)) -> 
-      case vecInstance @Bool @npred spred of
-        Dict -> ithBit (i-1) (snd $ untuple bv) spred 
--- ithBit i (BitVector x) n = _ -- x !!! (fromInteger i)
+      case vecInstance @a @npred spred of
+        Dict -> ithElem (i-1) (snd $ untuple bv) spred 
+
+vecToList :: forall a n . (SymVal a) =>  SVec a n -> SNat n -> [SBV a]
+vecToList bv sz@SZ  = 
+  case sz of
+    (_ :: SNat Z) -> [bv]
+vecToList bv ss@(SS spred) = 
+  case ss of
+    (_ :: SNat (S npred)) -> 
+      case vecInstance @a @npred spred of
+        Dict -> case untuple bv of 
+          (h, t) -> h : vecToList t spred 
+-- ithElem i (BitVector x) n = _ -- x !!! (fromInteger i)
 
 domain :: BitVector n -> ConfigM n SBool
 domain bv = gets domainFun <*> (pure bv)

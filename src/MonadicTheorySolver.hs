@@ -45,7 +45,7 @@ import qualified Data.Set as Set
 import ArgParse
 
 -- import Data.Graph
-
+import Data.Constraint (Dict(..))
 import GHC.Exts (sortWith)
 
 
@@ -236,62 +236,53 @@ validDomain = do
 --         SMT.Unsat -> return accum
 --         e -> error $ "TODO Failed quant " ++ show e
 
-declareOrDefineFuns ::
-  forall n . SNat n
+defineConstructor ::
+  forall n narity . SNat n
+  -> String 
+  -> SNat narity
   -> Map.Map PredExpr Int
   -> [PredExpr]
-  -> Symbolic [(String, VecFun n)]
-declareOrDefineFuns numPreds pmap exprs = do
-  let funArities = Map.toList $ getArities  exprs 
-  forM funArities $ \(f,ar) -> do
-    let allArgNums = [0 .. ar - 1]
-    let allArgNames = map (\arg -> ("f-arg-" ++ show arg)) allArgNums
-    let allArgs = _
-          -- map (\arg -> nameToBits numPreds $ ("f-arg-" ++ show arg)) allArgNums
-    let funBitNames = _ --funToBitFuns numPreds f
-    let bitFor expr =  pmap Map.! expr
-    let funFor e = _ 
-          -- case fromIntegral i < length funBitNames of
-          --   True -> (funBitNames !!! (fromIntegral i))
-          -- where
-          --   i = bitFor e
-    let canDefine e =
-          case e of
-            (PVar _) -> False
-            _ -> True
-        (toDefine, toDeclare) = partition canDefine exprs
-    --Define the ith-bit functions for our constructor when we can
-    --Otherwise, just declare them
-    forM_ toDeclare $ \expr@(PVar v) -> do
-          _
-          -- declareFun
-          --   s
-          --   (funFor expr)
-          --   (concat $ replicate (arity f) bvType)
-          return ()
-    forM toDefine $ \expr -> do
-      -- putStrLn $ "Defining SCC" ++ show (flattenSCC scc) ++ "for " ++ show f
-          -- putStrLn $ "** Defining function for " ++ show expr
-          let (PFunApp g gargs) = expr
-          let funBody =
+  -> (String, VecFun n)
+defineConstructor numPreds f numArgs pmap exprs = 
+  let 
+    (funForArgs :: [(Int, SVec (Vec Bool n) narity -> SBool)] ) = sortOn fst $ 
+      (flip map) exprs $ \ e ->  case vecInstance @Bool @n numPreds of
+        Dict -> case ( vecInstance @(Vec Bool n) @narity numArgs, e) of
+          (Dict, PVar _) -> 
+            let predNum = pmap Map.! e in (predNum, uninterpret $  f ++ "__" ++ show predNum) 
+          (Dict, PFunApp g gargs) -> 
+            let 
+              retFun =
                 case f == g of
                   -- e1 `Union` e2 ->
                   --   ((funFor e1) $$$ allArgs) \/ ((funFor e2) $$$ allArgs)
                   -- e1 `Intersect` e2 ->
                   --   (funFor e1 $$$ allArgs) /\ ((funFor e2) $$$ allArgs)
                   -- Neg e1 -> SMT.not ((funFor e1) $$$ allArgs)
-                  True ->
+                  True -> \ argVec ->
                       SBV.sAnd $
                       map
                         (\(setArg, argVal) -> pSMT numPreds pmap setArg argVal)
-                        (zip gargs allArgs)
-                  False -> sFalse
-                  -- Top -> sTrue
-                  -- Bottom -> sFalse
-          let argPairs = _ 
-          _ --defineFun s (funFor expr) argPairs funBody
-          return ()
-    return _
+                        $ zip gargs $ case (vecInstance @Bool @n numPreds) of 
+                          Dict -> vecToList argVec numArgs
+                  False -> \ _ -> sFalse 
+            in (pmap Map.! e, retFun)
+    in (f, VecFun f numArgs $ \ argVec -> makeSVec numPreds [fcomp argVec | (_, fcomp) <- funForArgs] )  
+    
+    
+
+declareOrDefineFuns ::
+  forall n . SNat n
+  -> Map.Map PredExpr Int
+  -> [PredExpr]
+  -> [(String, VecFun n)]
+declareOrDefineFuns numPreds pmap exprs = 
+  let 
+    funArities = Map.toList $ getArities  exprs 
+  in (flip map) funArities $ \(f,ar) -> 
+      case toENat ar of
+        (ENat sn_arity ) -> case sn_arity of
+          (_ :: SNat nar) -> defineConstructor numPreds f sn_arity pmap exprs  
 
 declareDomain ::
      forall n . SNat n ->  SBool -> String -> Predicate
@@ -360,7 +351,7 @@ makePred options numPreds litVarFor litList
   declareDomain  numPreds  _boolDomPreds _boolDomArgName
   --Declare or define the functions for each constructor in our Herbrand universe
   logIO "Declaring constructors"
-  funs <- declareOrDefineFuns _numPreds  _dict eqClasses
+  let funs = declareOrDefineFuns _numPreds  _dict eqClasses
   let allFreeVars :: [PredExpr] = filter isVar $ Maybe.catMaybes $ map toPredExpr subExprs  
       -- boolDomArgName = "z_boolDomain"
       -- boolDomArg = nameToBits numPreds boolDomArgName

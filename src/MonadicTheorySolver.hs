@@ -238,62 +238,60 @@ validDomain = do
 
 declareOrDefineFuns ::
   forall n . SNat n
-  -> PredNumConfig n
+  -> Map.Map PredExpr Int
   -> [PredExpr]
-  -> IO [[()]]
-declareOrDefineFuns numPreds state sccs = do
-  let funs = Map.elems $ funVals state
-  forM funs $ \f -> do
-    let allArgNums = [0 .. (arity f) - 1]
+  -> Symbolic [(String, VecFun n)]
+declareOrDefineFuns numPreds pmap exprs = do
+  let funArities = Map.toList $ getArities  exprs 
+  forM funArities $ \(f,ar) -> do
+    let allArgNums = [0 .. ar - 1]
     let allArgNames = map (\arg -> ("f-arg-" ++ show arg)) allArgNums
     let allArgs = _
           -- map (\arg -> nameToBits numPreds $ ("f-arg-" ++ show arg)) allArgNums
     let funBitNames = _ --funToBitFuns numPreds f
-    let bitFor expr =  (predNums state) Map.! expr
-    let funFor e =
-          case fromIntegral i < length funBitNames of
-            True -> (funBitNames !!! (fromIntegral i))
-          where
-            i = bitFor e
+    let bitFor expr =  pmap Map.! expr
+    let funFor e = _ 
+          -- case fromIntegral i < length funBitNames of
+          --   True -> (funBitNames !!! (fromIntegral i))
+          -- where
+          --   i = bitFor e
     let canDefine e =
           case e of
             (PVar _) -> False
             _ -> True
-        (toDefine, toDeclare) = partition canDefine sccs
+        (toDefine, toDeclare) = partition canDefine exprs
     --Define the ith-bit functions for our constructor when we can
     --Otherwise, just declare them
     forM_ toDeclare $ \expr@(PVar v) -> do
-          declareFun
-            s
-            (funFor expr)
-            (concat $ replicate (arity f) bvType)
+          _
+          -- declareFun
+          --   s
+          --   (funFor expr)
+          --   (concat $ replicate (arity f) bvType)
           return ()
     forM toDefine $ \expr -> do
       -- putStrLn $ "Defining SCC" ++ show (flattenSCC scc) ++ "for " ++ show f
           -- putStrLn $ "** Defining function for " ++ show expr
           let (PFunApp g gargs) = expr
           let funBody =
-                case vecFunName f == g of
+                case f == g of
                   -- e1 `Union` e2 ->
                   --   ((funFor e1) $$$ allArgs) \/ ((funFor e2) $$$ allArgs)
                   -- e1 `Intersect` e2 ->
                   --   (funFor e1 $$$ allArgs) /\ ((funFor e2) $$$ allArgs)
                   -- Neg e1 -> SMT.not ((funFor e1) $$$ allArgs)
                   True ->
-                      andAll $
+                      SBV.sAnd $
                       map
-                        (\(setArg, argVal) -> pSMT state setArg argVal)
+                        (\(setArg, argVal) -> pSMT numPreds pmap setArg argVal)
                         (zip gargs allArgs)
                   False -> sFalse
                   -- Top -> sTrue
                   -- Bottom -> sFalse
-          let argPairs =
-                concatMap
-                  (\argName ->
-                     zip (nameToBitNames (length bvType) argName) bvType)
-                  allArgNames
-          defineFun s (funFor expr) argPairs funBody
+          let argPairs = _ 
+          _ --defineFun s (funFor expr) argPairs funBody
           return ()
+    return _
 
 declareDomain ::
      forall n . SNat n ->  SBool -> String -> Predicate
@@ -340,57 +338,58 @@ declareDomain numPreds boolDomPreds boolDomArgName = _
 --     sccInt = (exprInt . head . flattenSCC)
 
 --TODO include constratailint stuff
-makePred ::
+makePred :: forall n .
      Options
+  -> SNat n
   -> (Literal -> SBool)
   -> [Literal]
   -> SBV.Symbolic (Either [Constr] TreeGrammar) --TODO return solution
-makePred options litVarFor litList
+makePred options numPreds litVarFor litList
   --setOptions s
  = do
   let log = if (verbose options) then (putStrLn . (";;;; " ++ )) else (\ _ -> return ())
+      logIO s = liftIO $ log s 
   let subExprs = orderedSubExpressions litList
       -- (posList, negList) = List.partition isPos clist
       theMaxArity = maxArity subExprs
       numForall = theMaxArity
+      eqClasses =  Maybe.catMaybes $ map toPredExpr subExprs -- equalityClasses clist subExprs --TODO: bring this back?
       -- constrNums = allExprNums subExprs
-      bvType = makeBvType numPreds
-      vars =
-        map (\i -> nameToBits numPreds $ "y_univ_" ++ show i) [1 .. numForall] 
-      state0 = (initialState numPreds vars (Maybe.mapMaybe toPredExpr subExprs) $ map flattenSCC eqClasses)
+      vars = _  
+  logIO "Declaring domain"
+  declareDomain  numPreds  _boolDomPreds _boolDomArgName
+  --Declare or define the functions for each constructor in our Herbrand universe
+  logIO "Declaring constructors"
+  funs <- declareOrDefineFuns _numPreds  _dict eqClasses
+  let allFreeVars :: [PredExpr] = filter isVar $ Maybe.catMaybes $ map toPredExpr subExprs  
+      -- boolDomArgName = "z_boolDomain"
+      -- boolDomArg = nameToBits numPreds boolDomArgName
       
-      funs :: [VecFun] = Map.elems $ funVals state0
-      allFreeVars :: [PredExpr] = filter isVar $ Maybe.catMaybes $ map toPredExpr subExprs  
-      boolDomArgName = "z_boolDomain"
-      boolDomArg = nameToBits numPreds boolDomArgName
-      eqClasses = map AcyclicSCC  $ Maybe.catMaybes $ map toPredExpr subExprs -- equalityClasses clist subExprs --TODO: bring this back?
       numPreds =  length eqClasses
-  log ("Lit Vars: " ++ show [(l, litVarFor l) | l <- litList]) 
-  log ("Pred numbers: " ++ show (predNums state0))
-  log $ "In theory solver, numBits: " ++ show numPreds
+      state0 = _ -- (initialState numPreds vars (Maybe.mapMaybe toPredExpr subExprs)  eqClasses)
+      
+  logIO ("Lit Vars: " ++ show [(l, litVarFor l) | l <- litList]) 
+  logIO ("Pred numbers: " ++ show (predNums state0))
+  logIO $ "In theory solver, numBits: " ++ show numPreds
   -- putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
   let comp = do
         -- boolDomPredList <- forM subExprs (booleanDomainClause boolDomArg)
-        posConstrPreds <- forM litList (posConstrClause litVarFor boolDomArg)
+        posConstrPreds <- forM litList (posConstrClause litVarFor _boolDomArg)
         negConstrPreds <- forM litList (negConstrClause litVarFor numPreds)
         -- predClauses <- forM subExprs functionDomainClause
         isValidDomain <- validDomain
-        funClauses <- forM funs funClause
-        let singleFunClause = andAll funClauses
+        funClauses <- forM funs _funClause
+        let singleFunClause = SBV.sAnd funClauses
         -- return $ isValidDomain ==> singleFunClause
-        funDomPreds <- (isValidDomain ==> singleFunClause)
+        let funDomPreds = (isValidDomain .=> singleFunClause)
             -- enumClauses <- enumeratedDomainClauses funPairs
         return
           ( funDomPreds
-          , andAll $ posConstrPreds {- ++ boolDomPredList -} 
+          , SBV.sAnd $ posConstrPreds {- ++ boolDomPredList -} 
           , negConstrPreds)
-  let ((funDomPreds, boolDomPreds, negPreds), state) = runState comp state0
+  ((funDomPreds, boolDomPreds, negPreds), state) <- runStateT comp state0
   --Declare our domain function and its subfunctions
-  log "Declaring domain"
-  declareDomain s numPreds bvType boolDomPreds boolDomArgName
-  --Declare or define the functions for each constructor in our Herbrand universe
-  log "Declaring constructors"
-  funs <- declareOrDefineFuns s numPreds bvType state eqClasses
+  
   --Declare functions that determines if a production is valid
   -- declareProdFuncions s numPreds bvType funs theMaxArity
   --Declare our existential variables
@@ -398,13 +397,13 @@ makePred options litVarFor litList
   -- forM_ (existentialVars state) $ \v -> do
   --   declareVec s v bvType
   --Assert the properties of each existential variable
-  log "Assert existential properties"
-  forM_ negPreds $ _assert s
+  logIO "Assert existential properties"
+  forM_ negPreds $ _assert
   --Assert our domain properties
-  log "Asserting function domain properties"
-  _assert s funDomPreds
-  log "About do check SAT"
-  result <- _check s
+  logIO "Asserting function domain properties"
+  _assert funDomPreds
+  logIO "About do check SAT"
+  result <- _check
   --TODO minimize?
   case result of
     _ -> _

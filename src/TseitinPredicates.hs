@@ -60,7 +60,7 @@ data PredNumConfig n = Config
 getNumPreds :: ConfigM n Int
 getNumPreds = sNatToInt <$> gets configNumPreds
 
-type ConfigM n = SBV.SymbolicT (StateT (PredNumConfig n) IO) 
+type ConfigM n = StateT (PredNumConfig n) (SBV.SymbolicT IO) 
 
 getAllFunctions :: ConfigM n [VecFun n]
 getAllFunctions = gets (Map.elems . funVals)
@@ -210,21 +210,21 @@ freshVecFun numBits name ar =
         Dict -> case vecInstance @(Vec Bool n) @nar sn_arity of
           Dict -> uninterpret name
 
-initialState :: forall n . SNat n -> [BitVector n] -> [PredExpr] -> [[PredExpr]] -> PredNumConfig n
-initialState numBits vars exprs connComps =
-  let (predMap, _) = allExprNums connComps
-   in Config
-        { predNums = predMap
-        , configNumPreds = numBits
-        , funVals =
-            Map.fromList
-              [ (f, freshVecFun numBits f ar )
-              | (f, ar) <- Map.toList $ getArities  exprs 
-              ]
-        , universalVars = vars
-        , bitVecInst = vecInstance @Bool @n numBits
-        , domainFun = case vecInstance @Bool @n numBits of
-          Dict -> uninterpret "inDomain"
-        }
+-- initialState :: forall n . SNat n -> [BitVector n] -> [PredExpr] -> [[PredExpr]] -> PredNumConfig n
+-- initialState numBits vars exprs connComps =
+--   let (predMap, _) = allExprNums connComps
+--    in Config
+--         { predNums = predMap
+--         , configNumPreds = numBits
+--         , funVals =
+--             Map.fromList
+--               [ (f, freshVecFun numBits f ar )
+--               | (f, ar) <- Map.toList $ getArities  exprs 
+--               ]
+--         , universalVars = vars
+--         , bitVecInst = vecInstance @Bool @n numBits
+--         , domainFun = case vecInstance @Bool @n numBits of
+--           Dict -> uninterpret "inDomain"
+--         }
 
 

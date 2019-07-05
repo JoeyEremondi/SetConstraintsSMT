@@ -54,7 +54,6 @@ data PredNumConfig n = Config
   , funVals :: Map.Map String (VecFun n)
   , universalVars :: [BitVector n]
   , bitVecInst :: Dict (SymVal (Vec Bool n))
-  , domainFun :: InDomain n
   }
 
 getNumPreds :: ConfigM n Int
@@ -115,8 +114,6 @@ vecToList bv ss@(SS spred) =
           (h, t) -> h : vecToList t spred 
 -- ithElem i (BitVector x) n = _ -- x !!! (fromInteger i)
 
-domain :: BitVector n -> ConfigM n SBool
-domain bv = gets domainFun <*> (pure bv)
 
 forallVar :: ConfigM n (BitVector n)
 forallVar = head <$> forallVars 1
@@ -156,50 +153,50 @@ funNamed f = do
 --       return $ eqCond .&& andAll neqConds
 --     _ -> return $ SMT.bool True
 
-booleanDomainClause :: BitVector n -> Expr -> ConfigM n SBool
-booleanDomainClause x e =
-  case e of
-    Var _ -> return $ sTrue
-    Neg e2 -> do
-      pe <- p e x
-      pe2 <- p e2 x
-      return $ pe .== (sNot pe2)
-    Union a b -> do
-      pe <- p e x
-      pa <- p a x
-      pb <- p b x
-      return $ pe .== (pa .|| pb)
-    Intersect a b -> do
-      pe <- p e x
-      pa <- p a x
-      pb <- p b x
-      return $ pe .== (pa .&& pb)
-    Top -> p e x
-    Bottom -> do
-      px <- p e x
-      return $ sNot px
-    _ -> return $ sTrue
+-- booleanDomainClause :: BitVector n -> Expr -> ConfigM n SBool
+-- booleanDomainClause x e =
+--   case e of
+--     Var _ -> return $ sTrue
+--     Neg e2 -> do
+--       pe <- p e x
+--       pe2 <- p e2 x
+--       return $ pe .== (sNot pe2)
+--     Union a b -> do
+--       pe <- p e x
+--       pa <- p a x
+--       pb <- p b x
+--       return $ pe .== (pa .|| pb)
+--     Intersect a b -> do
+--       pe <- p e x
+--       pa <- p a x
+--       pb <- p b x
+--       return $ pe .== (pa .&& pb)
+--     Top -> p e x
+--     Bottom -> do
+--       px <- p e x
+--       return $ sNot px
+--     _ -> return $ sTrue
 
-posConstrClause :: (Literal -> SBool) -> BitVector n -> Literal -> ConfigM n SBool
-posConstrClause litVarFor x l@(Literal (e1, e2)) = do
-  pe1 <- p e1 x
-  pe2 <- p e2 x
-  return $ (litVarFor l .=> (pe1 .=> pe2))
+posConstrClause :: (Literal -> SBool) -> Literal -> ConfigM n (BitVector n -> SBool)
+posConstrClause litVarFor l@(Literal (e1, e2)) = do
+  pnums <- gets predNums
+  numPreds <- gets configNumPreds  
+  return $ \x -> (litVarFor l .=> ((pSMT numPreds pnums e1 x) .=> (pSMT numPreds pnums e2 x)))
 
-negConstrClause :: Integral i => (Literal -> SBool) -> i -> Literal -> ConfigM n SBool
-negConstrClause litVarFor numPreds l@(Literal (e1, e2)) = do
+negConstrClause :: (Literal -> SBool) -> SNat n -> (BitVector n -> SBool) -> Literal -> ConfigM n SBool
+negConstrClause litVarFor numPreds domain l@(Literal (e1, e2)) = do
   (Dict) <- gets bitVecInst
   x <- SBV.exists_
   pe1 <- p e1 x
   pe2 <- p e2 x
   --Assert that each existential variable is in our domain
-  inDomain <- domain x
+  let inDomain = domain x
   --And that it satisfies P_e1 and not P_e2 (i.e. e1 contains an element not in e2, i.e. e1 not subset of e2)
   return $ (sNot  $ litVarFor l) .=> (inDomain .&& pe1 .&& (sNot pe2))
 
 --Assert that the given function is closed over the domain
-funClause :: forall n . VecFun n -> ConfigM n SBool
-funClause f = do
+funClause :: forall n .  (BitVector n -> SBool) -> VecFun n -> ConfigM n SBool
+funClause domain f = do
   npreds <- gets configNumPreds
   xsList <- forallVars $ arity f
   case f of
@@ -211,7 +208,7 @@ funClause f = do
               Dict -> do
                 let xs = makeSVec sn xsList
                 let fxs = fun xs
-                domain fxs
+                return $ domain fxs
 
 freshVecFun :: forall n . SNat n -> String -> Int -> VecFun n
 freshVecFun numBits name ar = 

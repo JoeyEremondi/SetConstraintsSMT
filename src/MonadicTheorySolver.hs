@@ -97,13 +97,13 @@ import GHC.Exts (sortWith)
 
 --Return the constraint that all current quantified universals
 --are in the domain
-validDomain :: forall n . ConfigM n SBool
-validDomain = do
+validDomain :: forall n . (BitVector n -> SBool) -> ConfigM n SBool
+validDomain domain = do
   vars <- gets universalVars
   case vars of
     [] -> return $ sTrue
     _ -> do
-      varResults <- forM vars (domain @n)
+      let varResults = map domain vars
       return $ SBV.sAnd varResults
 
 -- enumerateDomain :: Integral i => SMT.Solver -> i -> [SExpr] -> IO [BitVector]
@@ -285,8 +285,13 @@ declareOrDefineFuns numPreds pmap exprs =
           (_ :: SNat nar) -> defineConstructor numPreds f sn_arity pmap exprs  
 
 declareDomain ::
-     forall n . SNat n ->  SBool -> String -> Predicate
-declareDomain numPreds boolDomPreds boolDomArgName = _
+     forall n . SNat n ->  [(BitVector n -> SBool)] ->  BitVector n -> SBool
+declareDomain numPreds boolDomPreds arg = 
+  let 
+    domainToBeDefined = case (vecInstance @Bool @n numPreds) of
+      Dict -> uninterpret "domainToBeDefined"
+  in
+    domainToBeDefined  arg .&& SBV.sAnd [f arg | f <- boolDomPreds]
   --Declare each of our existential variables 
   --Declare our domain function
   --We separate it into a quantified part and non quantified part
@@ -334,7 +339,7 @@ makePred :: forall n .
   -> SNat n
   -> (Literal -> SBool)
   -> [Literal]
-  -> SBV.Symbolic (Either [Constr] TreeGrammar) --TODO return solution
+  -> SBV.Predicate --TODO return solution
 makePred options numPreds litVarFor litList
   --setOptions s
  = do
@@ -346,39 +351,52 @@ makePred options numPreds litVarFor litList
       numForall = theMaxArity
       eqClasses =  Maybe.catMaybes $ map toPredExpr subExprs -- equalityClasses clist subExprs --TODO: bring this back?
       -- constrNums = allExprNums subExprs
-      vars = _  
-  logIO "Declaring domain"
-  declareDomain  numPreds  _boolDomPreds _boolDomArgName
+  (vars :: [BitVector n]) <- case (vecInstance @Bool @n numPreds) of
+    Dict -> SBV.mkForallVars (theMaxArity )  
+  
   --Declare or define the functions for each constructor in our Herbrand universe
   logIO "Declaring constructors"
-  let funs = declareOrDefineFuns _numPreds  _dict eqClasses
+  
   let allFreeVars :: [PredExpr] = filter isVar $ Maybe.catMaybes $ map toPredExpr subExprs  
       -- boolDomArgName = "z_boolDomain"
       -- boolDomArg = nameToBits numPreds boolDomArgName
       
-      numPreds =  length eqClasses
-      state0 = _ -- (initialState numPreds vars (Maybe.mapMaybe toPredExpr subExprs)  eqClasses)
-      
+      (predMap, _) = allExprNums $ map (\ x -> [x]) eqClasses
+      funs = declareOrDefineFuns numPreds  predMap eqClasses
+      state0 = 
+        Config
+        { predNums = predMap
+        , configNumPreds = numPreds
+        , funVals =
+            Map.fromList funs
+        , universalVars = vars
+        , bitVecInst = vecInstance @Bool @n numPreds
+        }
+        
   logIO ("Lit Vars: " ++ show [(l, litVarFor l) | l <- litList]) 
   logIO ("Pred numbers: " ++ show (predNums state0))
-  logIO $ "In theory solver, numBits: " ++ show numPreds
+  logIO $ "In theory solver, numBits: " ++ show  (sNatToInt numPreds)
   -- putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
   let comp = do
         -- boolDomPredList <- forM subExprs (booleanDomainClause boolDomArg)
-        posConstrPreds <- forM litList (posConstrClause litVarFor _boolDomArg)
-        negConstrPreds <- forM litList (negConstrClause litVarFor numPreds)
-        -- predClauses <- forM subExprs functionDomainClause
-        isValidDomain <- validDomain
-        funClauses <- forM funs _funClause
+        --Get the predicates for each positive constraint
+        posConstrPreds <- forM litList (posConstrClause litVarFor)
+        --Declare our domain function that ensures all values in the domain satisfy the positive constraints
+        let theDomainFun = declareDomain  numPreds  posConstrPreds
+        --Get the constraints asserting that there exist values in the domain satisfying the negative constraints
+        negConstrPreds <- forM litList (negConstrClause litVarFor numPreds theDomainFun)
+        
+        --Assert that all our universal variables are in the domain
+        isValidDomain <- validDomain theDomainFun
+        funClauses <- forM (map snd funs) (funClause theDomainFun)
         let singleFunClause = SBV.sAnd funClauses
         -- return $ isValidDomain ==> singleFunClause
         let funDomPreds = (isValidDomain .=> singleFunClause)
             -- enumClauses <- enumeratedDomainClauses funPairs
         return
           ( funDomPreds
-          , SBV.sAnd $ posConstrPreds {- ++ boolDomPredList -} 
           , negConstrPreds)
-  ((funDomPreds, boolDomPreds, negPreds), state) <- runStateT comp state0
+  ((funDomPreds, negPreds), state) <- runStateT comp state0
   --Declare our domain function and its subfunctions
   
   --Declare functions that determines if a production is valid
@@ -387,21 +405,10 @@ makePred options numPreds litVarFor litList
   -- log "Declaring existentials"
   -- forM_ (existentialVars state) $ \v -> do
   --   declareVec s v bvType
-  --Assert the properties of each existential variable
-  logIO "Assert existential properties"
-  forM_ negPreds $ _assert
-  --Assert our domain properties
-  logIO "Asserting function domain properties"
-  _assert funDomPreds
+  
   logIO "About do check SAT"
-  result <- _check
-  --TODO minimize?
-  case result of
-    _ -> _
-    -- SMT.Sat ->
-    --   printAndReturnResult s options numPreds bvType state funs allFreeVars
-    -- SMT.Unsat -> return $ Left [] --TODO put something useful here
-    -- SMT.Unknown -> error "Failed to solve quanitification"
+  return $ (SBV.sAnd negPreds) .&& funDomPreds
+  
 
 -- printAndReturnResult ::
 --      SMT.Solver

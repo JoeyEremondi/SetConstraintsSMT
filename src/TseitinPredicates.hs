@@ -20,6 +20,7 @@ module TseitinPredicates where
 
 import SMTHelpers
 import Data.SBV (SymVal, SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>), Predicate, sNot, sTrue, sFalse, uninterpret)
+import qualified Data.SBV.Trans as SBV
 import Syntax 
 
 import Control.Monad.State
@@ -52,14 +53,14 @@ data PredNumConfig n = Config
   , configNumPreds :: SNat n
   , funVals :: Map.Map String (VecFun n)
   , universalVars :: [BitVector n]
-  , existentialVars :: [String]
+  , bitVecInst :: Dict (SymVal (Vec Bool n))
   , domainFun :: InDomain n
   }
 
 getNumPreds :: ConfigM n Int
 getNumPreds = sNatToInt <$> gets configNumPreds
 
-type ConfigM n a = State (PredNumConfig n) a
+type ConfigM n = SBV.SymbolicT (StateT (PredNumConfig n) IO) 
 
 getAllFunctions :: ConfigM n [VecFun n]
 getAllFunctions = gets (Map.elems . funVals)
@@ -176,7 +177,8 @@ posConstrClause litVarFor x l@(Literal (e1, e2)) = do
 
 negConstrClause :: Integral i => (Literal -> SBool) -> i -> Literal -> ConfigM n SBool
 negConstrClause litVarFor numPreds l@(Literal (e1, e2)) = do
-  x <- fresh numPreds
+  (Dict) <- gets bitVecInst
+  x <- SBV.exists_
   pe1 <- p e1 x
   pe2 <- p e2 x
   --Assert that each existential variable is in our domain
@@ -220,20 +222,9 @@ initialState numBits vars exprs connComps =
               | (f, ar) <- Map.toList $ getArities  exprs 
               ]
         , universalVars = vars
-        , existentialVars = []
+        , bitVecInst = vecInstance @Bool @n numBits
         , domainFun = case vecInstance @Bool @n numBits of
           Dict -> uninterpret "inDomain"
         }
 
-fresh :: Integral i => i -> ConfigM n (BitVector n)
-fresh numPreds = do
-  state <- get
-  n <- getNumPreds
-  let oldVars = existentialVars state
-      takenVars = Set.fromList oldVars
-      varNames = map (\i -> "x_exists_" ++ show i) [0 ..]
-      validVars = filter (\x -> not $ x `Set.member` takenVars) varNames
-      newVar = head validVars
-      newState = state {existentialVars = newVar : oldVars}
-  put newState
-  return $ _ numPreds newVar
+

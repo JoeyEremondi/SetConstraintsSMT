@@ -80,7 +80,7 @@ eSucc :: ENat -> ENat
 eSucc (ENat s) = ENat (SS s)
 
 toENat :: Int -> ENat
-toENat 0 = ENat (SZ)
+toENat 1 = ENat (SZ)
 toENat sn = eSucc (toENat n)
   where n = sn - 1
         -- (ENat (en :: SNat n))  = toENat n

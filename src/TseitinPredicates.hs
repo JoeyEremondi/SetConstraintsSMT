@@ -100,7 +100,10 @@ ithElem i bv ss@(SS spred) =
   case ss of
     (_ :: SNat (S npred)) -> 
       case vecInstance @a @npred spred of
-        Dict -> ithElem (i-1) (snd $ untuple bv) spred 
+        Dict -> case i of
+          0 -> (fst $ untuple bv) 
+          _ -> ithElem (i-1) (snd $ untuple bv) spred 
+ithElem i bv sz = error $ "iThelem" ++ show (i, sNatToInt sz)
 
 vecToList :: forall a n . (SymVal a) =>  SVec a n -> SNat n -> [SBV a]
 vecToList bv sz@SZ  = 

@@ -113,7 +113,7 @@ eSucc (ENat ss@(SS pred d)) = case pred of
     
 
 toENat :: Int -> ENat
-toENat 1 = ENat (SZ)
+toENat 0 = ENat (SZ)
 toENat sn = eSucc (toENat n)
   where n = sn - 1
         -- (ENat (en :: SNat n))  = toENat n
@@ -125,7 +125,7 @@ newtype Fun = Fun
 
 
 type family Vec a (n :: Nat) where
-  Vec a Z = a
+  Vec a Z = ()
   Vec a (S n) = (a, Vec a n)
   -- deriving (Read, Data, Show, SMT.HasKind, SymVal)
 
@@ -146,9 +146,9 @@ type SVec a n = SBV (Vec a n)
 --         Dict -> Dict 
 
 makeSVec :: forall a (n :: Nat) . (SymVal a) => SNat n -> [SBV a] -> SVec a n
-makeSVec sz@SZ [elem] = 
+makeSVec sz@SZ [] = 
   case sz of
-    (_ :: SNat Z) -> elem
+    (_ :: SNat Z) -> SMT.literal ()
 makeSVec ss@(SS npred d) (first:rest) = 
   case ss of
     (_ :: SNat (S n')) -> 

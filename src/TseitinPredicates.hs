@@ -95,9 +95,9 @@ p e x = do
 --   return $ ithElem i x n
 
 ithElem :: forall a n . (SymVal a) => Int -> SVec a n -> SNat n -> SBV a
-ithElem 0 bv sz@SZ  = 
-  case sz of
-    (_ :: SNat Z) -> bv
+-- ithElem 0 bv sz@SZ  = 
+--   case sz of
+--     (_ :: SNat Z) -> bv
 ithElem i  bv ss@(SS spred d) = 
   case ss of
     (_ :: SNat (S npred)) -> 
@@ -109,7 +109,7 @@ ithElem i bv sz = error $ "iThelem" ++ show (i, sNatToInt sz)
 vecToList :: forall a n . (SymVal a) =>  SVec a n -> SNat n -> [SBV a]
 vecToList bv sz@SZ  = 
   case sz of
-    (_ :: SNat Z) -> [bv]
+    (_ :: SNat Z) -> []
 vecToList bv ss@(SS spred d) = 
   case ss of
     (_ :: SNat (S npred)) -> 
@@ -207,14 +207,19 @@ funClause domain f = do
   xsList <- forallVars $ arity f
   liftIO $ putStrLn "Got forall Vars"
   inst <- gets bitVecInst 
+  liftIO $ putStrLn "Got bitVecInst"
   case f of
-    VecFun _ sn fun ->
+    VecFun _ sn fun -> do
+      liftIO $ putStrLn "Past VecFun match"
       case sn of
-        (_ :: SNat nar) -> 
+        (_ :: SNat nar) -> do
+          liftIO $ putStrLn "Past SNat type match"
           case inst of
               Dict -> do
+                liftIO $ putStrLn "Past dict match"
                 let xs = makeSVec sn xsList
                 let fxs = fun xs
+                liftIO $ putStrLn "Returning in FunClause"
                 return $ domain fxs
 
 -- freshVecFun :: forall n . SNat n -> String -> Int -> VecFun n

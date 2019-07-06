@@ -3,7 +3,6 @@
 module Main where
 
 import Andersen
-import qualified SimpleSMT as SMT
 import Syntax
 import System.Environment
 
@@ -11,7 +10,6 @@ import ArgParse
 import Data.Semigroup
 import Options.Applicative
 import SolveSetConstraints 
-import SMTHelpers (makeSolver) 
 
 zero = "zero"
 
@@ -72,10 +70,9 @@ main = do
           False -> read inConstrsString
           True -> (Var "XDummy", parseBansheeString inConstrsString)
   let constr = CAnd [c, (CNot (e `CSubset` Bottom))]
-  s <- makeSolver options
   -- solveSetConstraints s1 cset
   -- solveSetConstraints s1 goodCheck
-  eitherRet <- solveSetConstraints s options constr
+  eitherRet <- solveSetConstraints options constr
   case eitherRet of
     Left s -> putStrLn (";;;; " ++ s)
     Right _ -> putStrLn ";;;; Solution found"

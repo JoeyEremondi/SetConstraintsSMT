@@ -334,13 +334,14 @@ declareDomain numPreds boolDomPreds arg =
 --     sccInt = (exprInt . head . flattenSCC)
 
 --TODO include constratailint stuff
-makePred :: forall n .
+makePredWithSize :: forall n .
      Options
   -> SNat n
   -> (Literal -> SBool)
   -> [Literal]
+  -> SBool
   -> SBV.Predicate --TODO return solution
-makePred options numPreds litVarFor litList
+makePredWithSize options numPreds litVarFor litList litPred
   --setOptions s
  = do
   let log = if (verbose options) then (putStrLn . (";;;; " ++ )) else (\ _ -> return ())
@@ -407,9 +408,19 @@ makePred options numPreds litVarFor litList
   --   declareVec s v bvType
   
   logIO "About do check SAT"
-  return $ (SBV.sAnd negPreds) .&& funDomPreds
+  return $ (SBV.sAnd negPreds) .&& funDomPreds .&& litPred
   
-
+makePred :: 
+  Options
+  -> Int
+  -> (Literal -> SBool)
+  -> [Literal]
+  -> SBool
+  -> SBV.Predicate
+makePred options i = 
+  case (toENat i) of 
+    (ENat (numPreds :: SNat n)) -> 
+      makePredWithSize options numPreds 
 -- printAndReturnResult ::
 --      SMT.Solver
 --   -> Options

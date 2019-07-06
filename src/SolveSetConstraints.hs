@@ -10,6 +10,9 @@ import qualified MonadicTheorySolver as Solver
 import Numeric (showIntAtBase)
 import SMTHelpers
 import qualified Data.SBV as SMT
+import Data.SBV (SymVal, SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>), Predicate, sNot, sTrue, sFalse, uninterpret)
+import qualified Data.SBV.Trans as SBV
+
 import Syntax
 
 import Data.Either (rights)
@@ -18,52 +21,40 @@ import Data.Tree (flatten)
 import Data.Tuple (swap)
 import Debug.Trace (trace) 
 
-formulaForCExpr :: (Literal -> SMT.SExpr) -> CExpr -> SMT.SExpr
+formulaForCExpr :: (Literal -> SBool) -> CExpr -> SBool
 formulaForCExpr litIdentifierFor cexp =
   case cexp of
     (s1 `CSubset` s2) -> litIdentifierFor $ Literal (s1, s2)
-    (CAnd cexprs) -> andAll $ map self cexprs
-    (COr cexprs) -> orAll $ map self cexprs
-    (c1 `CImplies` c2) -> self c1 ==> self c2
-    (c1 `CIff` c2) -> self c1 === self c2
+    (CAnd cexprs) -> SBV.sAnd $ map self cexprs
+    (COr cexprs) -> SBV.sOr $ map self cexprs
+    (c1 `CImplies` c2) -> self c1 .=> self c2
+    (c1 `CIff` c2) -> self c1 .== self c2
     (CXor cexprs) -> error "TODO XOR" --"xor" $$ [self c1, self c2]
-    (CNot c1) -> SMT.not $ self c1
+    (CNot c1) -> sNot $ self c1
   where
     self = formulaForCExpr litIdentifierFor
 
-makeLemma :: (Literal -> SMT.SExpr) -> [Constr] -> SMT.SExpr
-makeLemma litNum clist = SMT.not $ andAll $ map helper clist 
+makeLemma :: (Literal -> SBool) -> [Constr] -> SBool
+makeLemma litNum clist = sNot $ SBV.sAnd $ map helper clist 
   where
     helper c =
       case c of
         e1 `Sub` e2 -> litNum $ Literal (e1, e2)
-        e1 `NotSub` e2 -> SMT.not $ litNum $ Literal (e1, e2)
+        e1 `NotSub` e2 -> sNot $ litNum $ Literal (e1, e2)
 
---intToBits :: Integral i => i -> String
-intToBits n i = BitVector $ map bitToSexp paddedBinaryString
-  where
-    asBinaryString = showIntAtBase 2 intToDigit i ""
-    paddedBinaryString =
-      reverse $ take n $ (reverse asBinaryString) ++ repeat '0'
-    bitToSexp '0' = SMT.bool False
-    bitToSexp '1' = SMT.bool True
 
-solveSetConstraints :: SMT.Solver -> Options -> (CExpr) -> IO (Either String ())
-solveSetConstraints s options cInitial
+
+solveSetConstraints :: Options -> (CExpr) -> IO (Either String ())
+solveSetConstraints options cInitial
   --Declare our inclusion function
   --
  = do
   let log = if (verbose options) then (putStrLn . (";;;; " ++ )) else (\ _ -> return ())
   log $ "cInitial: " ++ show cInitial
-  SMT.simpleCommand s ["set-logic", "UF"]
-  when (solver options == "z3") $ 
-    SMT.simpleCommand s ["set-option", ":smt.mbqi", "true"]
-  -- when (verbose options) $ SMT.simpleCommand s ["set-option", ":produce-unsat-cores", "true"]
-  SMT.simpleCommand s ["push"]
   -- SMT.declareFun s "literalValue" litType SMT.tBool
-  forM_ literalNames $ \(SMT.Atom ln) -> SMT.declare s ln SMT.tBool
+  -- forM_ literalNames $ _ -- \(SMT.Atom ln) -> SMT.declare s ln SMT.tBool
   --Assert the SMT version of our expression
-  SMT.assert s $ formulaForCExpr litFun cComplete
+  
   log $
     "Done asserting formula, " ++
      show (Set.size lits) ++ " literals total"
@@ -75,58 +66,47 @@ solveSetConstraints s options cInitial
   log "Done asserting subset properties"
   -- assertTransitive
   -- log "Done asserting transitivity"
-  result <- Solver.makePred s options litFun (Set.toList lits)
+  --TODO: assert litFormula and makePred
+  result <- SBV.sat $ do
+    literalNames <- SBV.mkExistVars (length litList) 
+    let litMap = Map.fromList $ flip zip literalNames $ litList
+    let litFun l =
+          case (Map.lookup l litMap) of
+            Nothing -> error ("Key" ++ show l ++ " not in map " ++ show litMap)
+            Just x -> x
+    let litFormula = formulaForCExpr litFun cComplete
+    Solver.makePred options numPredInt litFun (Set.toList lits) litFormula
   case result of 
-    (Left r) -> do
+    (SBV.SatResult (SBV.Satisfiable _ _)) -> return $ Right () --  <$> putStrLn "Found Solution"
+    (SBV.SatResult (SBV.Unsatisfiable _ _)) -> do
       -- when (verbose options) (SMT.simpleCommand s ["get-unsat-core"]) 
       return $ Left "Could not find solution to constraints"
-    (Right r) -> return $ Right () --  <$> putStrLn "Found Solution"
+    s -> error $ "Unknown SAT result " ++ show s
   
     -- exprSubset lhs rhs = (Fun "literalValue") $$$ [exprFun lhs, exprFun rhs]
   where
-    -- cStructural =
-    --   CAnd $
-    --   concatMap
-    --     (uncurry subsetLemmaFor)
-    --     [(e1, e2) | e1 <- baseExprList, e2 <- baseExprList]
-    -- cInter = CAnd [cInitial, cStructural] --This should have all the literals we need
-    -- cTransitive =
-    --   CAnd
-    --     [ transConstr e1 e2 e3
-    --     | Literal (e1, e2) <- litList
-    --     , Just e3list <- [Map.lookup e2 litRightSidesMap]
-    --     , e3 <- e3list
-    --     , Map.member (Literal (e1, e3)) litMap
-    --     ]
-    --   where
-    --     transConstr e1 e2 e3 =
-    --       (CAnd [CSubset e1 e2, CSubset e2 e3]) `CImplies` (CSubset e1 e3)
+    
     cComplete = cInitial --We don't need a bunch of lemmas if we use Z3's SMT solver
       --And if we do, then we should assert them for the literal variables 
     -- CAnd [cInter, cTransitive] --TODO add more
-    literalNames =
-      map (\i -> SMT.Atom $ "literal_" ++ show i) [0 .. length lits - 1]
+      -- map (\i -> SMT.Atom $ "literal_" ++ show i) [0 .. length lits - 1]
     -- baseLits = literalsInCExpr cBase
     lits = literalsInCExpr cInitial
     litList = Set.toList lits
-    litMap = Map.fromList $ flip zip literalNames $ litList
-    litFun l =
-      case (Map.lookup l litMap) of
-        Nothing -> error ("Key" ++ show l ++ " not in map " ++ show litMap)
-        Just x -> x
+    
     litRightSidesMap =
       Map.fromList
         [ (e1, [e2 | Literal (e1', e2) <- litList, e1' == e1])
         | Literal (e1, _) <- litList
         ]
     litPartitions = partitionLiterals
-    toFloat = (fromIntegral :: Int -> Float)
-    numBits = ceiling $ logBase 2 (toFloat $ Set.size lits)
-    litType = replicate numBits SMT.tBool
+    -- numBits = ceiling $ logBase 2 (toFloat $ Set.size lits)
+    -- litType = replicate numBits SMT.tBool
     -- baseExprs = exprsInCExpr cBase
     -- baseExprList = Set.toList baseExprs
     exprs = exprsInCExpr cInitial
     exprList = Set.toList exprs
+    numPredInt = length exprList
     -- exprMap = Map.fromList $ zip (exprList) [0 ..]
     -- exprFun = (intToBits numBits) . (exprMap Map.!)
     -- solverLoop i = do
@@ -166,20 +146,20 @@ solveSetConstraints s options cInitial
     --       solverLoop (i + 1)
     --     Right _ -> findResults i rest
     --   return ()
-    assertTransitive =
-      let bitNames = map (\i -> "bit_" ++ show i) [0 .. numBits - 1]
-          [arg1names, arg2names, arg3names] =
-            map (\arg -> map (arg ++) bitNames) ["arg1_", "arg2_", "arg3"]
-          typePairs =
-            map (\x -> (SMT.Atom x, SMT.tBool)) $
-            arg1names ++ arg2names ++ arg3names
-          [arg1, arg2, arg3] =
-            map (map SMT.Atom) [arg1names, arg2names, arg3names]
-          bodyCond =
-            (((Fun "literalValue") $$$ [BitVector arg1, BitVector arg2]) /\
-             ((Fun "literalValue") $$$ [BitVector arg2, BitVector arg3])) ==>
-            ((Fun "literalValue") $$$ [BitVector arg1, BitVector arg3])
-       in SMT.assert s $ forAll typePairs bodyCond
+    -- assertTransitive =
+    --   let bitNames = map (\i -> "bit_" ++ show i) [0 .. numBits - 1]
+    --       [arg1names, arg2names, arg3names] =
+    --         map (\arg -> map (arg ++) bitNames) ["arg1_", "arg2_", "arg3"]
+    --       typePairs =
+    --         map (\x -> (SMT.Atom x, SMT.tBool)) $
+    --         arg1names ++ arg2names ++ arg3names
+    --       [arg1, arg2, arg3] =
+    --         map (map SMT.Atom) [arg1names, arg2names, arg3names]
+    --       bodyCond =
+    --         (((Fun "literalValue") $$$ [BitVector arg1, BitVector arg2]) /\
+    --          ((Fun "literalValue") $$$ [BitVector arg2, BitVector arg3])) .=>
+    --         ((Fun "literalValue") $$$ [BitVector arg1, BitVector arg3])
+    --    in SMT.assert s $ fSBV.sOr typePairs bodyCond
     -- assertTransitive =
     --   forM
     --     [ (e1, e2, e3)
@@ -189,7 +169,7 @@ solveSetConstraints s options cInitial
     --     , length (List.nub [e1, e2, e3]) == 3
     --     ] $ \(e1, e2, e3) -> do
     --     SMT.assert s $
-    --       ((exprSubset e1 e2) /\ (exprSubset e2 e3)) ==> (exprSubset e1 e3)
+    --       ((exprSubset e1 e2) /\ (exprSubset e2 e3)) .=> (exprSubset e1 e3)
     --Lemmas that always hold, no matter what literals we deal with
     subsetLemmaFor :: Expr -> Expr -> [CExpr]
     --Bottom subset of everything

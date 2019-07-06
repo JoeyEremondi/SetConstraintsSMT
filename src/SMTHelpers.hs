@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -51,7 +52,7 @@ import Data.Constraint (Dict(..))
 -- declareFun s (FuadeclareFun s f
 
 -- getBitVec :: SMTaBitVector -> IO BitVector
--- getBitVec s bv =a
+-- getBitVec s bv =a_
 --   forM bv $ \bit -> do
 --     v <- SMT.getExpr s bit
 --     return $ SMT.value v
@@ -59,16 +60,40 @@ import Data.Constraint (Dict(..))
 data Nat = 
   Z | S Nat
 
+type DictForAll n = forall a . SymVal a => Dict (SymVal (Vec a n))
+
+
+
 data SNat :: Nat -> * where
   SZ :: SNat Z
-  SS :: SNat n -> SNat (S n)
+  SS :: SNat n -> DictForAll n -> SNat (S n)
+
+buildInst :: forall n . DictForAll n -> DictForAll (S n)
+buildInst d = result
+  where
+    result :: forall a' . SymVal a' => Dict (SymVal (Vec a' (S n)))
+    result = case (d @a') of
+      Dict -> Dict
+
+getInst :: forall n . SNat n -> DictForAll n
+getInst sz@SZ = Dict
+getInst ss@(SS pred d) = 
+  let 
+    result :: forall a' . SymVal a' => Dict (SymVal (Vec a' n))
+    result = case pred of
+      (_ :: SNat npred) -> case d @a' of
+        Dict -> Dict
+  in 
+    result 
+
+
 
 sNatToInt :: forall n . SNat n -> Int
 sNatToInt sn = helper sn 0
   where 
     helper :: forall n . SNat n -> Int -> Int
     helper SZ i = i
-    helper ssn@(SS sn) i =
+    helper ssn@(SS sn d) i =
       case ssn of
         (_ :: SNat (S n')) -> 
           helper @n' sn (1+i)
@@ -77,7 +102,15 @@ data ENat where
   ENat :: SNat n -> ENat
 
 eSucc :: ENat -> ENat
-eSucc (ENat s) = ENat (SS s)
+eSucc (ENat SZ) = ENat (SS SZ Dict) 
+eSucc (ENat ss@(SS pred d)) = case pred of
+  (_ :: SNat nfoo) -> 
+    let
+      result :: forall a' . SymVal a' => Dict (SymVal (a', (Vec a' nfoo))) 
+      result = case d @a' of
+        Dict -> Dict 
+    in  ENat (SS ss result)
+    
 
 toENat :: Int -> ENat
 toENat 1 = ENat (SZ)
@@ -102,24 +135,24 @@ type family Vec a (n :: Nat) where
 type SVec a n = SBV (Vec a n)
 
 
-vecInstance :: forall a (n :: Nat) . (SymVal a) => SNat n -> Dict (SymVal (Vec a n))
-vecInstance sz@SZ = 
-  case sz of
-    (_ :: SNat Z) -> Dict
-vecInstance ss@(SS n) = 
-  case ss of
-    (_ :: SNat (S n')) -> 
-      case vecInstance @a @n' n of
-        Dict -> Dict 
+-- vecInstance :: forall a (n :: Nat) . (SymVal a) => SNat n -> Dict (SymVal (Vec a n))
+-- vecInstance sz@SZ = 
+--   case sz of
+--     (_ :: SNat Z) -> Dict
+-- vecInstance ss@(SS n) = 
+--   case ss of
+--     (_ :: SNat (S n')) -> 
+--       case vecInstance @a @n' n of
+--         Dict -> Dict 
 
 makeSVec :: forall a (n :: Nat) . (SymVal a) => SNat n -> [SBV a] -> SVec a n
 makeSVec sz@SZ [elem] = 
   case sz of
     (_ :: SNat Z) -> elem
-makeSVec ss@(SS npred) (first:rest) = 
+makeSVec ss@(SS npred d) (first:rest) = 
   case ss of
     (_ :: SNat (S n')) -> 
-      case (makeSVec @a @n' npred rest, vecInstance @a @n' npred) of
+      case (makeSVec @a @n' npred rest, d @a ) of
         (vecRest, Dict) -> tuple (first, vecRest) 
 
 type BitVector n = SVec Bool n 

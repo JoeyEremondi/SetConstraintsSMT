@@ -48,12 +48,14 @@ import Data.Constraint (Dict(..))
 -- funDomain = Fun "functionDomain"
 
 -- type SBVec = SMT.BitVec
+type DictFor n = Dict (SymVal (Vec Bool n))
+ 
 data PredNumConfig n = Config
   { predNums :: Map.Map PredExpr Int
   , configNumPreds :: SNat n
   , funVals :: Map.Map String (VecFun n)
   , universalVars :: [BitVector n]
-  , bitVecInst :: Dict (SymVal (Vec Bool n))
+  , bitVecInst :: DictFor n
   }
 
 getNumPreds :: ConfigM n Int
@@ -96,23 +98,22 @@ ithElem :: forall a n . (SymVal a) => Int -> SVec a n -> SNat n -> SBV a
 ithElem 0 bv sz@SZ  = 
   case sz of
     (_ :: SNat Z) -> bv
-ithElem i bv ss@(SS spred) = 
+ithElem i  bv ss@(SS spred d) = 
   case ss of
     (_ :: SNat (S npred)) -> 
-      case vecInstance @a @npred spred of
-        Dict -> case i of
-          0 -> (fst $ untuple bv) 
-          _ -> ithElem (i-1) (snd $ untuple bv) spred 
+      case (i, d @a) of
+          (0, Dict) -> (fst $ untuple bv) 
+          (_, Dict) -> ithElem (i-1)  (snd $ untuple bv) spred 
 ithElem i bv sz = error $ "iThelem" ++ show (i, sNatToInt sz)
 
 vecToList :: forall a n . (SymVal a) =>  SVec a n -> SNat n -> [SBV a]
 vecToList bv sz@SZ  = 
   case sz of
     (_ :: SNat Z) -> [bv]
-vecToList bv ss@(SS spred) = 
+vecToList bv ss@(SS spred d) = 
   case ss of
     (_ :: SNat (S npred)) -> 
-      case vecInstance @a @npred spred of
+      case d @a  of
         Dict -> case untuple bv of 
           (h, t) -> h : vecToList t spred 
 -- ithElem i (BitVector x) n = _ -- x !!! (fromInteger i)
@@ -200,26 +201,29 @@ negConstrClause litVarFor numPreds domain l@(Literal (e1, e2)) = do
 --Assert that the given function is closed over the domain
 funClause :: forall n .  (BitVector n -> SBool) -> VecFun n -> ConfigM n SBool
 funClause domain f = do
+  liftIO $ putStrLn "FunClause start"
   npreds <- gets configNumPreds
+  liftIO $ putStrLn "Got num preds"
   xsList <- forallVars $ arity f
+  liftIO $ putStrLn "Got forall Vars"
+  inst <- gets bitVecInst 
   case f of
     VecFun _ sn fun ->
       case sn of
         (_ :: SNat nar) -> 
-          case vecInstance @Bool @n npreds of
-            Dict -> case vecInstance @(Vec Bool n) @nar sn of
+          case inst of
               Dict -> do
                 let xs = makeSVec sn xsList
                 let fxs = fun xs
                 return $ domain fxs
 
-freshVecFun :: forall n . SNat n -> String -> Int -> VecFun n
-freshVecFun numBits name ar = 
-  case toENat ar of
-    (ENat sn_arity ) -> case sn_arity of
-      (_ :: SNat nar) -> VecFun @nar @n name sn_arity $ case vecInstance @Bool @n numBits of
-        Dict -> case vecInstance @(Vec Bool n) @nar sn_arity of
-          Dict -> uninterpret name
+-- freshVecFun :: forall n . SNat n -> String -> Int -> VecFun n
+-- freshVecFun numBits name ar = 
+--   case toENat ar of
+--     (ENat sn_arity ) -> case sn_arity of
+--       (_ :: SNat nar) -> VecFun @nar @n name sn_arity $ case vecInstance @Bool @n numBits of
+--         Dict -> case vecInstance @(Vec Bool n) @nar sn_arity of
+--           Dict -> uninterpret name
 
 -- initialState :: forall n . SNat n -> [BitVector n] -> [PredExpr] -> [[PredExpr]] -> PredNumConfig n
 -- initialState numBits vars exprs connComps =

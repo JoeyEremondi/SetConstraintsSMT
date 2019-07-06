@@ -246,8 +246,8 @@ defineConstructor ::
 defineConstructor numPreds f numArgs pmap exprs = 
   let 
     (funForArgs :: [(Int, SVec (Vec Bool n) narity -> SBool)] ) = sortOn fst $ 
-      (flip map) exprs $ \ e ->  case vecInstance @Bool @n numPreds of
-        Dict -> case ( vecInstance @(Vec Bool n) @narity numArgs, e) of
+      (flip map) exprs $ \ e ->  case getInst numPreds @Bool of
+        Dict -> case ( getInst numArgs @(Vec Bool n) , e) of
           (Dict, PVar _) -> 
             let predNum = pmap Map.! e in (predNum, uninterpret $  f ++ "__" ++ show predNum) 
           (Dict, PFunApp g gargs) -> 
@@ -263,7 +263,7 @@ defineConstructor numPreds f numArgs pmap exprs =
                       SBV.sAnd $
                       map
                         (\(setArg, argVal) -> pSMT numPreds pmap setArg argVal)
-                        $ zip gargs $ case (vecInstance @Bool @n numPreds) of 
+                        $ zip gargs $ case (getInst numPreds @Bool) of 
                           Dict -> vecToList argVec numArgs
                   False -> \ _ -> sFalse 
             in (pmap Map.! e, retFun)
@@ -288,7 +288,7 @@ declareDomain ::
      forall n . SNat n ->  [(BitVector n -> SBool)] ->  BitVector n -> SBool
 declareDomain numPreds boolDomPreds arg = 
   let 
-    domainToBeDefined = case (vecInstance @Bool @n numPreds) of
+    domainToBeDefined = case (getInst  numPreds @Bool) of
       Dict -> uninterpret "domainToBeDefined"
   in
     domainToBeDefined  arg .&& SBV.sAnd [f arg | f <- boolDomPreds]
@@ -352,7 +352,7 @@ makePredWithSize options numPreds litVarFor litList litPred
       numForall = theMaxArity
       eqClasses =  Maybe.catMaybes $ map toPredExpr subExprs -- equalityClasses clist subExprs --TODO: bring this back?
       -- constrNums = allExprNums subExprs
-  (vars :: [BitVector n]) <- case (vecInstance @Bool @n numPreds) of
+  (vars :: [BitVector n]) <- case (getInst numPreds @Bool) of
     Dict -> SBV.mkForallVars (theMaxArity )  
   
   --Declare or define the functions for each constructor in our Herbrand universe
@@ -371,7 +371,7 @@ makePredWithSize options numPreds litVarFor litList litPred
         , funVals =
             Map.fromList funs
         , universalVars = vars
-        , bitVecInst = vecInstance @Bool @n numPreds
+        , bitVecInst = getInst numPreds @Bool 
         }
         
   logIO ("Lit Vars: " ++ show [(l, litVarFor l) | l <- litList]) 
@@ -379,17 +379,22 @@ makePredWithSize options numPreds litVarFor litList litPred
   logIO $ "In theory solver, numBits: " ++ show  (sNatToInt numPreds)
   -- putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
   let comp = do
+        liftIO $ putStrLn "In state computation"
         -- boolDomPredList <- forM subExprs (booleanDomainClause boolDomArg)
         --Get the predicates for each positive constraint
         posConstrPreds <- forM litList (posConstrClause litVarFor)
+        liftIO $ putStrLn "Got pos constrs"
         --Declare our domain function that ensures all values in the domain satisfy the positive constraints
         let theDomainFun = declareDomain  numPreds  posConstrPreds
+        liftIO $ putStrLn "Got domain fun"
         --Get the constraints asserting that there exist values in the domain satisfying the negative constraints
         negConstrPreds <- forM litList (negConstrClause litVarFor numPreds theDomainFun)
-        
+        liftIO $ putStrLn "Got neg constrs"
         --Assert that all our universal variables are in the domain
         isValidDomain <- validDomain theDomainFun
+        liftIO $ putStrLn "Got valid domain ssesrtion"
         funClauses <- forM (map snd funs) (funClause theDomainFun)
+        liftIO $ putStrLn "Got fun closed over domain clauses"
         let singleFunClause = SBV.sAnd funClauses
         -- return $ isValidDomain ==> singleFunClause
         let funDomPreds = (isValidDomain .=> singleFunClause)
@@ -397,7 +402,8 @@ makePredWithSize options numPreds litVarFor litList litPred
         return
           ( funDomPreds
           , negConstrPreds)
-  ((funDomPreds, negPreds), state) <- runStateT comp state0
+  ((funDomPreds, negPreds), state) <-  do runStateT comp state0
+  logIO "Ran state computation"
   --Declare our domain function and its subfunctions
   
   --Declare functions that determines if a production is valid

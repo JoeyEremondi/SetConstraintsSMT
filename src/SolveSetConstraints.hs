@@ -66,8 +66,17 @@ solveSetConstraints options cInitial
   log "Done asserting subset properties"
   -- assertTransitive
   -- log "Done asserting transitivity"
+  let defaultConfig = SBV.z3
+  let defaultSolver = SBV.solver defaultConfig
+  let solver = defaultSolver {SBV.options = (\c -> "-v:3" : SBV.options defaultSolver c )}
+  let smtConfig = 
+        defaultConfig 
+          { SBV.solver = solver
+          , SBV.verbose = verbose options
+          , SBV.transcript = Just "./transcript.out"
+          }
   --TODO: assert litFormula and makePred
-  result <- SBV.sat $ do
+  result <- SBV.satWith smtConfig $ do
     literalNames <- SBV.mkExistVars (length litList) 
     let litMap = Map.fromList $ flip zip literalNames $ litList
     let litFun l =

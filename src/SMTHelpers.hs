@@ -21,7 +21,6 @@
 module SMTHelpers where
 
 import Syntax
-import Debug.Trace (trace)
 
 import Data.Data (Proxy(..))
 

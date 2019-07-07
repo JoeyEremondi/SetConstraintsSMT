@@ -48,7 +48,6 @@ import ArgParse
 import Data.Constraint (Dict(..))
 import GHC.Exts (sortWith)
 
-import Debug.Trace (trace)
 
 --Clauses asserting that our production checking function is correct
 --and asserting that each value in our domain is reachable through some production
@@ -244,7 +243,7 @@ defineConstructor ::
   -> Map.Map PredExpr Int
   -> [PredExpr]
   -> (String, VecFun n)
-defineConstructor numPreds f numArgs pmap exprs = trace ("Define constructor numPreds: " ++ (show $ sNatToInt numPreds) ++ " with exprs " ++ show exprs) $ 
+defineConstructor numPreds f numArgs pmap exprs =
   let 
     (funForArgs :: [Vec (BitVector n) narity -> SBool] ) = map snd $ {-sortOn fst $ -}  
       (flip map) exprs $ \ e ->  case (e) of
@@ -267,7 +266,7 @@ defineConstructor numPreds f numArgs pmap exprs = trace ("Define constructor num
                   False -> \ _ -> sFalse 
             in (pmap Map.! e, retFun)
                           
-    in trace ("FunForargs:  " ++ show (length funForArgs)) $  (f, VecFun f numArgs $ \ argVec -> makeSVec numPreds (map ($ argVec) funForArgs ))  
+    in  (f, VecFun f numArgs $ \ argVec -> makeSVec numPreds (map ($ argVec) funForArgs ))  
     
     
 
@@ -376,22 +375,16 @@ makePredWithSize options numPreds  litVarFor litList exprList  litPred theMaxAri
   logIO $ "In theory solver, numBits: " ++ show  (sNatToInt numPreds)
   -- putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
   let comp = do
-        liftIO $ putStrLn "In state computation"
         -- boolDomPredList <- forM subExprs (booleanDomainClause boolDomArg)
         --Get the predicates for each positive constraint
         posConstrPreds <- forM litList (posConstrClause litVarFor)
-        liftIO $ putStrLn "Got pos constrs"
         --Declare our domain function that ensures all values in the domain satisfy the positive constraints
         let theDomainFun = declareDomain  numPreds  posConstrPreds
-        liftIO $ putStrLn "Got domain fun"
         --Get the constraints asserting that there exist values in the domain satisfying the negative constraints
         negConstrPreds <- forM litList (negConstrClause litVarFor numPreds theDomainFun)
-        liftIO $ putStrLn "Got neg constrs"
         --Assert that all our universal variables are in the domain
         isValidDomain <- validDomain theDomainFun
-        liftIO $ putStrLn "Got valid domain ssesrtion"
         funClauses <- forM (map snd funs) (funClause theDomainFun)
-        liftIO $ putStrLn "Got fun closed over domain clauses"
         let singleFunClause = SBV.sAnd funClauses
         -- return $ isValidDomain ==> singleFunClause
         let funDomPreds = (isValidDomain .=> singleFunClause)

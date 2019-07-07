@@ -19,7 +19,6 @@ import Data.Either (rights)
 import Data.Graph
 import Data.Tree (flatten)
 import Data.Tuple (swap)
-import Debug.Trace (trace) 
 
 formulaForCExpr :: (Literal -> SBool) -> CExpr -> SBool
 formulaForCExpr litIdentifierFor cexp =
@@ -67,14 +66,22 @@ solveSetConstraints options cInitial
   log "Done asserting subset properties"
   -- assertTransitive
   -- log "Done asserting transitivity"
-  let defaultConfig = SBV.z3
+  let defaultConfig = 
+        case (solver options) of
+          "z3" -> SBV.z3
+          "cvc4" -> SBV.cvc4
+          "cvc4-fmf" -> SBV.cvc4
   let defaultSolver = SBV.solver defaultConfig 
-  let solver = defaultSolver {SBV.options = (\c -> "-v:3" : SBV.options defaultSolver c ) }
+  let theSolver = 
+        case (solver options) of
+          "z3" -> defaultSolver {SBV.options = (\c -> (if (verbose options) then ["-v:3"] else []) ++ SBV.options defaultSolver c ) }
+          "cvc4-fmf" -> defaultSolver {SBV.options = (\c -> ["--finite-model-find"] ++ SBV.options defaultSolver c ) }
+          _ -> defaultSolver
   let smtConfig = 
         defaultConfig 
-          { SBV.solver = solver
+          { SBV.solver = theSolver
           , SBV.verbose = verbose options
-          , SBV.transcript = Just "./transcript.out"
+          , SBV.transcript = if verbose options then Just "./transcript.out" else Nothing
           , SBV.satTrackUFs = False
           }
   --TODO: assert litFormula and makePred

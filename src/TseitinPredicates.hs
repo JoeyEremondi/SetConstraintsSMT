@@ -37,7 +37,6 @@ import qualified Data.Set as Set
 
 
 import Data.Graph
-import Debug.Trace (trace)
 import Data.Constraint (Dict(..))
 
 
@@ -177,19 +176,14 @@ negConstrClause litVarFor numPreds domain l@(Literal (e1, e2)) = do
 --Assert that the given function is closed over the domain
 funClause :: forall n .  (BitVector n -> SBool) -> VecFun n -> ConfigM n SBool
 funClause domain f = do
-  liftIO $ putStrLn "FunClause start"
   npreds <- gets configNumPreds
-  liftIO $ putStrLn "Got num preds"
   xsList <- forallVars $ arity f
-  liftIO $ putStrLn "Got forall Vars"
   case f of
     VecFun _ sn fun -> do
-      liftIO $ putStrLn "Past VecFun match"
       case sn of
         (_ :: SNat nar) -> do
             let xs = makeSVec sn xsList
             let fxs = fun xs
-            liftIO $ putStrLn "Returning in FunClause"
             return $ domain fxs
 
 -- freshVecFun :: forall n . SNat n -> String -> Int -> VecFun n

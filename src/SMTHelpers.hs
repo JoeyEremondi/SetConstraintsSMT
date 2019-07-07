@@ -23,10 +23,14 @@ module SMTHelpers where
 import Syntax
 import Debug.Trace (trace)
 
+import Data.Data (Proxy(..))
+
 import Control.Monad
 import Data.Char (digitToInt)
 import qualified Data.List as List
 import qualified Data.SBV.Trans as SBV
+import qualified Data.SBV.Internals as Internal
+
 import Data.SBV (SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>))
 import ArgParse
 
@@ -170,12 +174,62 @@ genVec gen ss@(SS spred) = do
   head <- gen
   return $ VCons head tail
 
+ithElem :: forall a n .  Int -> Vec a n -> SNat n -> a
+-- ithElem 0 bv sz@SZ  = 
+--   case sz of
+--     (_ :: SNat Z) -> bv
+ithElem i  (VCons h t) ss@(SS spred) = 
+  case ss of
+    (_ :: SNat (S npred)) -> 
+      case (i) of
+          (0) -> h
+          (_) -> ithElem (i-1)  t spred 
+ithElem i bv sz = error $ "iThelem" ++ show (i, sNatToInt sz)
+
+vecToList :: forall a n . Vec a n -> SNat n -> [a]
+vecToList VNil sz@SZ  = 
+  case sz of
+    (_ :: SNat Z) -> []
+vecToList (VCons h t) ss@(SS spred) = 
+  case ss of
+    (_ :: SNat (S npred)) -> h : vecToList t spred 
+-- ithElem i (BitVector x) n = _ -- x !!! (fromInteger i)
+
 existsBitVec :: (SBV.MonadSymbolic m) =>  SNat n -> m (BitVector n)
 existsBitVec = genVec SBV.exists_
 
 forallBitVec :: (SBV.MonadSymbolic m) =>  SNat n -> m (BitVector n)
 forallBitVec = genVec SBV.forall_
 
+instance SBV.Uninterpreted ((SNat arity, SNat n, FunArgs arity n) -> SBool) where
+  sbvUninterpret = error "TODO don't use"
+  uninterpret nm = f
+    where 
+      f (sa, sn, args)
+         = Internal.SBV $ Internal.SVal kBool $ Right $ Internal.cache result
+         where 
+               kBool = Internal.kindOf (Proxy @Bool)
+               kindList = replicate (sNatToInt  sa * sNatToInt sn) kBool
+               result st = do isSMT <- Internal.inSMTMode st
+                              Internal.newUninterpreted st nm (Internal.SBVType $ kindList ++ [kBool]) Nothing
+                              argSV <- (fmap concat)  $  forM (vecToList args sa) $ \bv -> forM (vecToList bv sn) $ Internal.sbvToSV st
+                              mapM_ Internal.forceSVArg argSV
+                              Internal.newExpr st kBool $ Internal.SBVApp (Internal.Uninterpreted nm) argSV
+
+type One = S Z
+
+sOne :: SNat One
+sOne = SS SZ
+
+instance SBV.Uninterpreted ((SNat n, BitVector n) -> SBool) where
+  sbvUninterpret = error "TODO don't use"
+  uninterpret nm  = 
+    let 
+      (f :: (SNat One, SNat n, FunArgs One n) -> SBool) = SBV.uninterpret nm  
+      result (sn, bv) =  (f (sOne, sn, VCons bv VNil))
+          
+    in result 
+    
 -- makeBitVector :: [SBool] -> EBitVector 
 -- makeBitVector [e] = EBitVector $ (BitVector e :: BitVector Z)
 -- makeBitVector (first : rest) = EBitVector $ BitVector (first, bvRest)

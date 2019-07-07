@@ -249,7 +249,7 @@ defineConstructor numPreds f numArgs pmap exprs = trace ("Define constructor num
     (funForArgs :: [Vec (BitVector n) narity -> SBool] ) = map snd $ {-sortOn fst $ -}  
       (flip map) exprs $ \ e ->  case (e) of
           (PVar _) -> 
-            let predNum = pmap Map.! e in (predNum, _uninterpret $  f ++ "__" ++ show predNum) 
+            let predNum = pmap Map.! e in (predNum, \ arg -> uninterpret  (f ++ "__" ++ show predNum) (numArgs, numPreds, arg)) 
           ( PFunApp g gargs) -> 
             let 
               retFun =
@@ -288,7 +288,7 @@ declareDomain ::
      forall n . SNat n ->  [(BitVector n -> SBool)] ->  BitVector n -> SBool
 declareDomain numPreds boolDomPreds arg = 
   let 
-    domainToBeDefined = _uninterpret "domainToBeDefined"
+    domainToBeDefined = \ arg -> uninterpret "domainToBeDefined" (numPreds, arg)
   in
     domainToBeDefined  arg .&& SBV.sAnd [f arg | f <- boolDomPreds]
   --Declare each of our existential variables 

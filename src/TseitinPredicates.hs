@@ -93,26 +93,7 @@ p e x = do
 --     -- let xi = SMT.extract x (toInteger i) (toInteger i)
 --   return $ ithElem i x n
 
-ithElem :: forall a n .  Int -> Vec a n -> SNat n -> a
--- ithElem 0 bv sz@SZ  = 
---   case sz of
---     (_ :: SNat Z) -> bv
-ithElem i  (VCons h t) ss@(SS spred) = 
-  case ss of
-    (_ :: SNat (S npred)) -> 
-      case (i) of
-          (0) -> h
-          (_) -> ithElem (i-1)  t spred 
-ithElem i bv sz = error $ "iThelem" ++ show (i, sNatToInt sz)
 
-vecToList :: forall a n . Vec a n -> SNat n -> [a]
-vecToList VNil sz@SZ  = 
-  case sz of
-    (_ :: SNat Z) -> []
-vecToList (VCons h t) ss@(SS spred) = 
-  case ss of
-    (_ :: SNat (S npred)) -> h : vecToList t spred 
--- ithElem i (BitVector x) n = _ -- x !!! (fromInteger i)
 
 
 forallVar :: ConfigM n (BitVector n)

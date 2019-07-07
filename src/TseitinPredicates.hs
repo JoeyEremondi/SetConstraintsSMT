@@ -58,7 +58,8 @@ data PredNumConfig n = Config
 getNumPreds :: ConfigM n Int
 getNumPreds = sNatToInt <$> gets configNumPreds
 
-type ConfigM n = StateT (PredNumConfig n) (StateT QSAT IO) 
+type ConfigM n = StateT (PredNumConfig n) (StateT QSAT IO)
+
 
 getAllFunctions :: ConfigM n [VecFun n]
 getAllFunctions = gets (Map.elems . funVals)
@@ -164,7 +165,7 @@ posConstrClause litVarFor l@(Literal (e1, e2)) = do
 
 negConstrClause :: (Literal -> Bit) -> SNat n -> (BitVector n -> Bit) -> Literal -> ConfigM n Bit
 negConstrClause litVarFor numPreds domain l@(Literal (e1, e2)) = do
-  x <- existsBitVec numPreds
+  x <- lift $ existsBitVec numPreds
   pe1 <- p e1 x
   pe2 <- p e2 x
   --Assert that each existential variable is in our domain

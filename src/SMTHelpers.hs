@@ -35,6 +35,7 @@ import Data.Data (Data)
 
 import Data.Constraint (Dict(..))
 
+import Control.Monad.State
 
 -- data VecFun = VecFun
 --   { vecFunName :: String
@@ -190,11 +191,11 @@ vecToList (VCons h t) ss@(SS spred) =
     (_ :: SNat (S npred)) -> h : vecToList t spred 
 -- ithElem i (BitVector x) n = _ -- x !!! (fromInteger i)
 
-existsBitVec :: (Monad m) =>  SNat n -> m (BitVector n)
-existsBitVec = genVec _
+existsBitVec :: (MonadState s m, HasQSAT s) =>  SNat n -> m (BitVector n)
+existsBitVec = genVec exists
 
-forallBitVec :: (Monad m) =>  SNat n -> m (BitVector n)
-forallBitVec = genVec _
+forallBitVec :: (MonadState s m, HasQSAT s) =>  SNat n -> m (BitVector n)
+forallBitVec = genVec forall
 
 -- 
 type One = S Z

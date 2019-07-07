@@ -57,7 +57,7 @@ solveSetConstraints options cInitial
   --Assert the SMT version of our expression
   
   log $
-    "Done asserting formula, " ++
+    "Done asserting formula, " ++ 
      show (Set.size lits) ++ " literals total"
   -- log $
   --   "Partitioned into " ++

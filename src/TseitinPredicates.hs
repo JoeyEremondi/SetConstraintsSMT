@@ -19,7 +19,7 @@
 module TseitinPredicates where
 
 import SMTHelpers
-import Data.SBV (SymVal, SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>), Predicate, sNot, sTrue, sFalse, uninterpret)
+import Data.SBV ( SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>), Predicate, sNot, sTrue, sFalse, uninterpret)
 import qualified Data.SBV.Trans as SBV
 import Syntax 
 
@@ -33,7 +33,7 @@ import qualified Data.Maybe as Maybe
 import Data.Char (isAlphaNum)
 import qualified Data.Set as Set
 
-import Data.SBV.Tuple (untuple)
+-- import Data.SBV.Tuple (untuple)
 
 
 import Data.Graph
@@ -48,14 +48,13 @@ import Data.Constraint (Dict(..))
 -- funDomain = Fun "functionDomain"
 
 -- type SBVec = SMT.BitVec
-type DictFor n = Dict (SymVal (Vec Bool n))
+-- type DictFor n = Dict (SymVal (Vec Bool n))
  
 data PredNumConfig n = Config
   { predNums :: Map.Map PredExpr Int
   , configNumPreds :: SNat n
   , funVals :: Map.Map String (VecFun n)
   , universalVars :: [BitVector n]
-  , bitVecInst :: DictFor n
   }
 
 getNumPreds :: ConfigM n Int
@@ -94,28 +93,25 @@ p e x = do
 --     -- let xi = SMT.extract x (toInteger i) (toInteger i)
 --   return $ ithElem i x n
 
-ithElem :: forall a n . (SymVal a) => Int -> SVec a n -> SNat n -> SBV a
+ithElem :: forall a n .  Int -> Vec a n -> SNat n -> a
 -- ithElem 0 bv sz@SZ  = 
 --   case sz of
 --     (_ :: SNat Z) -> bv
-ithElem i  bv ss@(SS spred d) = 
+ithElem i  (VCons h t) ss@(SS spred) = 
   case ss of
     (_ :: SNat (S npred)) -> 
-      case (i, d @a) of
-          (0, Dict) -> (fst $ untuple bv) 
-          (_, Dict) -> ithElem (i-1)  (snd $ untuple bv) spred 
+      case (i) of
+          (0) -> h
+          (_) -> ithElem (i-1)  t spred 
 ithElem i bv sz = error $ "iThelem" ++ show (i, sNatToInt sz)
 
-vecToList :: forall a n . (SymVal a) =>  SVec a n -> SNat n -> [SBV a]
-vecToList bv sz@SZ  = 
+vecToList :: forall a n . Vec a n -> SNat n -> [a]
+vecToList VNil sz@SZ  = 
   case sz of
     (_ :: SNat Z) -> []
-vecToList bv ss@(SS spred d) = 
+vecToList (VCons h t) ss@(SS spred) = 
   case ss of
-    (_ :: SNat (S npred)) -> 
-      case d @a  of
-        Dict -> case untuple bv of 
-          (h, t) -> h : vecToList t spred 
+    (_ :: SNat (S npred)) -> h : vecToList t spred 
 -- ithElem i (BitVector x) n = _ -- x !!! (fromInteger i)
 
 
@@ -189,8 +185,7 @@ posConstrClause litVarFor l@(Literal (e1, e2)) = do
 
 negConstrClause :: (Literal -> SBool) -> SNat n -> (BitVector n -> SBool) -> Literal -> ConfigM n SBool
 negConstrClause litVarFor numPreds domain l@(Literal (e1, e2)) = do
-  (Dict) <- gets bitVecInst
-  x <- SBV.exists_
+  x <- existsBitVec numPreds
   pe1 <- p e1 x
   pe2 <- p e2 x
   --Assert that each existential variable is in our domain
@@ -206,21 +201,15 @@ funClause domain f = do
   liftIO $ putStrLn "Got num preds"
   xsList <- forallVars $ arity f
   liftIO $ putStrLn "Got forall Vars"
-  inst <- gets bitVecInst 
-  liftIO $ putStrLn "Got bitVecInst"
   case f of
     VecFun _ sn fun -> do
       liftIO $ putStrLn "Past VecFun match"
       case sn of
         (_ :: SNat nar) -> do
-          liftIO $ putStrLn "Past SNat type match"
-          case inst of
-              Dict -> do
-                liftIO $ putStrLn "Past dict match"
-                let xs = makeSVec sn xsList
-                let fxs = fun xs
-                liftIO $ putStrLn "Returning in FunClause"
-                return $ domain fxs
+            let xs = makeSVec sn xsList
+            let fxs = fun xs
+            liftIO $ putStrLn "Returning in FunClause"
+            return $ domain fxs
 
 -- freshVecFun :: forall n . SNat n -> String -> Int -> VecFun n
 -- freshVecFun numBits name ar = 

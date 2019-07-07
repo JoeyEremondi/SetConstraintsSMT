@@ -25,7 +25,7 @@ module MonadicTheorySolver where
 import SMTHelpers
 import Syntax 
 import TseitinPredicates
-import Data.SBV (SymVal, SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>), Predicate, sNot, sTrue, sFalse, uninterpret)
+import Data.SBV (SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>), Predicate, sNot, sTrue, sFalse, uninterpret)
 import qualified Data.SBV.Trans as SBV
 
 
@@ -246,12 +246,11 @@ defineConstructor ::
   -> (String, VecFun n)
 defineConstructor numPreds f numArgs pmap exprs = trace ("Define constructor numPreds: " ++ (show $ sNatToInt numPreds) ++ " with exprs " ++ show exprs) $ 
   let 
-    (funForArgs :: [SVec (Vec Bool n) narity -> SBool] ) = map snd $ {-sortOn fst $ -}  
-      (flip map) exprs $ \ e ->  case getInst numPreds @Bool of
-        Dict -> case ( getInst numArgs @(Vec Bool n) , e) of
-          (Dict, PVar _) -> 
-            let predNum = pmap Map.! e in (predNum, uninterpret $  f ++ "__" ++ show predNum) 
-          (Dict, PFunApp g gargs) -> 
+    (funForArgs :: [Vec (BitVector n) narity -> SBool] ) = map snd $ {-sortOn fst $ -}  
+      (flip map) exprs $ \ e ->  case (e) of
+          (PVar _) -> 
+            let predNum = pmap Map.! e in (predNum, _uninterpret $  f ++ "__" ++ show predNum) 
+          ( PFunApp g gargs) -> 
             let 
               retFun =
                 case f == g of
@@ -264,8 +263,7 @@ defineConstructor numPreds f numArgs pmap exprs = trace ("Define constructor num
                       SBV.sAnd $
                       map
                         (\(setArg, argVal) -> pSMT numPreds pmap setArg argVal)
-                        $ zip gargs $ case (getInst numPreds @Bool) of 
-                          Dict -> vecToList argVec numArgs
+                        $ zip gargs $ vecToList argVec numArgs
                   False -> \ _ -> sFalse 
             in (pmap Map.! e, retFun)
                           
@@ -290,8 +288,7 @@ declareDomain ::
      forall n . SNat n ->  [(BitVector n -> SBool)] ->  BitVector n -> SBool
 declareDomain numPreds boolDomPreds arg = 
   let 
-    domainToBeDefined = case (getInst  numPreds @Bool) of
-      Dict -> uninterpret "domainToBeDefined"
+    domainToBeDefined = _uninterpret "domainToBeDefined"
   in
     domainToBeDefined  arg .&& SBV.sAnd [f arg | f <- boolDomPreds]
   --Declare each of our existential variables 
@@ -353,8 +350,7 @@ makePredWithSize options numPreds  litVarFor litList exprList  litPred theMaxAri
   
   let numForall = theMaxArity
       -- constrNums = allExprNums subExprs
-  (vars :: [BitVector n]) <- case (getInst numPreds @Bool) of
-    Dict -> SBV.mkForallVars (theMaxArity )  
+  (vars :: [BitVector n]) <- forM [1 .. theMaxArity] $ \_ -> forallBitVec numPreds 
   
   --Declare or define the functions for each constructor in our Herbrand universe
   logIO "Declaring constructors"
@@ -372,7 +368,6 @@ makePredWithSize options numPreds  litVarFor litList exprList  litPred theMaxAri
         , funVals =
             Map.fromList funs
         , universalVars = vars
-        , bitVecInst = getInst numPreds @Bool 
         }
         
   logIO ("Lit Vars: " ++ show [(l, litVarFor l) | l <- litList]) 
@@ -418,7 +413,7 @@ makePredWithSize options numPreds  litVarFor litList exprList  litPred theMaxAri
   logIO "About do check SAT"
   return $ (SBV.sAnd negPreds) .&& funDomPreds .&& litPred
   
-makePred :: 
+makePred ::  
   Options
   -> (Literal -> SBool)
   -> [Literal]

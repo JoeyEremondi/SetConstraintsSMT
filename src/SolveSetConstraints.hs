@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeApplications #-}
 module SolveSetConstraints where
 
 import ArgParse
@@ -7,40 +8,39 @@ import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified MonadicTheorySolver as Solver
+import  MonadicTheorySolver (andAll)
+
 import Numeric (showIntAtBase)
 import SMTHelpers
-import qualified Data.SBV as SMT
-import Data.SBV (SymVal, SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>), Predicate, sNot, sTrue, sFalse, uninterpret)
-import qualified Data.SBV.Trans as SBV
-import qualified Data.SBV.Trans.Control as Control
-
+import Ersatz
 import Syntax
 
-import Data.Either (rights)
+import Data.Either (rights) 
 import Data.Graph
 import Data.Tree (flatten)
 import Data.Tuple (swap)
+import Control.Monad.State
 
-formulaForCExpr :: (Literal -> SBool) -> CExpr -> SBool
+formulaForCExpr :: (Literal -> Bit) -> CExpr -> Bit
 formulaForCExpr litIdentifierFor cexp =
   case cexp of
     (s1 `CSubset` s2) -> litIdentifierFor $ Literal (s1, s2)
-    (CAnd cexprs) -> SBV.sAnd $ map self cexprs
-    (COr cexprs) -> SBV.sOr $ map self cexprs
-    (c1 `CImplies` c2) -> self c1 .=> self c2
-    (c1 `CIff` c2) -> self c1 .== self c2
+    (CAnd cexprs) -> andAll $ map self cexprs
+    (COr cexprs) -> Ersatz.any id $ map self cexprs
+    (c1 `CImplies` c2) -> self c1 ==> self c2
+    (c1 `CIff` c2) -> self c1 === self c2
     (CXor cexprs) -> error "TODO XOR" --"xor" $$ [self c1, self c2]
-    (CNot c1) -> sNot $ self c1
+    (CNot c1) -> Ersatz.not $ self c1
   where
     self = formulaForCExpr litIdentifierFor
 
-makeLemma :: (Literal -> SBool) -> [Constr] -> SBool
-makeLemma litNum clist = sNot $ SBV.sAnd $ map helper clist 
+makeLemma :: (Literal -> Bit) -> [Constr] -> Bit
+makeLemma litNum clist = Ersatz.not $ andAll $ map helper clist 
   where
     helper c =
       case c of
         e1 `Sub` e2 -> litNum $ Literal (e1, e2)
-        e1 `NotSub` e2 -> sNot $ litNum $ Literal (e1, e2)
+        e1 `NotSub` e2 -> Ersatz.not $ litNum $ Literal (e1, e2)
 
 
 
@@ -67,33 +67,9 @@ solveSetConstraints options cInitial
   log "Done asserting subset properties"
   -- assertTransitive
   -- log "Done asserting transitivity"
-  let defaultConfig = 
-        case (solver options) of
-          "z3" -> SBV.z3
-          "cvc4" -> SBV.cvc4
-          "cvc4-fmf" -> SBV.cvc4
-  let defaultSolver = SBV.solver defaultConfig 
-  let theSolver = 
-        case (solver options) of
-          "z3" -> defaultSolver
-          "cvc4-fmf" -> defaultSolver {SBV.options = (\c -> ["--finite-model-find"] ++ SBV.options defaultSolver c ) }
-          _ -> defaultSolver
-  let optList = 
-        case (solver options) of 
-          "z3" -> [Control.OptionKeyword ":smt.mbqi" ["true"]]
-          _ -> [] 
-  let smtConfig = 
-        defaultConfig 
-          { SBV.solver = theSolver
-          , SBV.verbose = verbose options
-          , SBV.transcript = if verbose options then Just "./transcript.out" else Nothing
-          , SBV.satTrackUFs = False
-          , SBV.isNonModelVar =  const True
-          , SBV.solverSetOptions = optList
-          }
   --TODO: assert litFormula and makePred
-  result <- SBV.isSatisfiableWith smtConfig $ do
-    literalNames <- SBV.mkExistVars (length litList) 
+  result <- solveWith @_ @[] depqbf $ do
+    literalNames <- _ (length litList) 
     let litMap = Map.fromList $ flip zip literalNames $ litList
     let litFun l =
           case (Map.lookup l litMap) of
@@ -101,12 +77,12 @@ solveSetConstraints options cInitial
             Just x -> x
     let litFormula = formulaForCExpr litFun cComplete
     Solver.makePred options  litFun (Set.toList lits) litFormula
-  case result of 
-    True -> return $ Right () --  <$> putStrLn "Found Solution"
-    False -> do
+  case fst result of 
+    Satisfied -> return $ Right () --  <$> putStrLn "Found Solution"
+    Unsatisfied -> do
       -- when (verbose options) (SMT.simpleCommand s ["get-unsat-core"]) 
       return $ Left "Could not find solution to constraints"
-  
+    Unsolved -> error "Couldn't solve problem"
     -- exprSubset lhs rhs = (Fun "literalValue") $$$ [exprFun lhs, exprFun rhs]
   where
     
@@ -181,7 +157,7 @@ solveSetConstraints options cInitial
     --         map (map SMT.Atom) [arg1names, arg2names, arg3names]
     --       bodyCond =
     --         (((Fun "literalValue") $$$ [BitVector arg1, BitVector arg2]) /\
-    --          ((Fun "literalValue") $$$ [BitVector arg2, BitVector arg3])) .=>
+    --          ((Fun "literalValue") $$$ [BitVector arg2, BitVector arg3])) ==>
     --         ((Fun "literalValue") $$$ [BitVector arg1, BitVector arg3])
     --    in SMT.assert s $ fSBV.sOr typePairs bodyCond
     -- assertTransitive =
@@ -193,7 +169,7 @@ solveSetConstraints options cInitial
     --     , length (List.nub [e1, e2, e3]) == 3
     --     ] $ \(e1, e2, e3) -> do
     --     SMT.assert s $
-    --       ((exprSubset e1 e2) /\ (exprSubset e2 e3)) .=> (exprSubset e1 e3)
+    --       ((exprSubset e1 e2) /\ (exprSubset e2 e3)) ==> (exprSubset e1 e3)
     --Lemmas that always hold, no matter what literals we deal with
     subsetLemmaFor :: Expr -> Expr -> [CExpr]
     --Bottom subset of everything

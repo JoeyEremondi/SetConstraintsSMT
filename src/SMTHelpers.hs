@@ -6,7 +6,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE KindSignatures #-} 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -27,15 +27,11 @@ import Data.Data (Proxy(..))
 import Control.Monad
 import Data.Char (digitToInt)
 import qualified Data.List as List
-import qualified Data.SBV.Trans as SBV
-import qualified Data.SBV.Internals as Internal
-
-import Data.SBV (SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>))
+import Ersatz
 import ArgParse
 
 import Data.Data (Data)
 
--- import Data.SBV.Tuple (tuple)
 
 import Data.Constraint (Dict(..))
 
@@ -155,10 +151,10 @@ makeSVec ss@(SS npred) (first:rest) = --trace ("Making vec length " ++ show (sNa
         (vecRest) -> VCons first vecRest 
 -- makeSVec sn l = error $ "Can't make vector of length" ++ show (sNatToInt  sn) ++ " from list of length " ++ show l
 
-type BitVector n = Vec SBool n 
+type BitVector n = Vec Bit n 
 type FunArgs arity n = Vec (BitVector n) arity
 type Constructor arity n = FunArgs arity n -> BitVector n
-type InDomain n = (BitVector n) -> SBool
+type InDomain n = (BitVector n) -> Bit
 
 data VecFun :: Nat -> * where
   VecFun :: forall arity n . String -> SNat arity -> Constructor arity n -> VecFun n
@@ -166,7 +162,7 @@ data VecFun :: Nat -> * where
 arity (VecFun _ sn _) = sNatToInt sn
 vecFunName (VecFun name _ _) = name
 
-genVec :: (SBV.MonadSymbolic m) => (m a) -> SNat n -> m (Vec a n)
+genVec :: (Monad m) => (m a) -> SNat n -> m (Vec a n)
 genVec gen sz@SZ = return VNil
 genVec gen ss@(SS spred) = do
   tail <- genVec gen spred
@@ -194,42 +190,20 @@ vecToList (VCons h t) ss@(SS spred) =
     (_ :: SNat (S npred)) -> h : vecToList t spred 
 -- ithElem i (BitVector x) n = _ -- x !!! (fromInteger i)
 
-existsBitVec :: (SBV.MonadSymbolic m) =>  SNat n -> m (BitVector n)
-existsBitVec = genVec SBV.exists_
+existsBitVec :: (Monad m) =>  SNat n -> m (BitVector n)
+existsBitVec = genVec _
 
-forallBitVec :: (SBV.MonadSymbolic m) =>  SNat n -> m (BitVector n)
-forallBitVec = genVec SBV.forall_
+forallBitVec :: (Monad m) =>  SNat n -> m (BitVector n)
+forallBitVec = genVec _
 
-instance SBV.Uninterpreted ((SNat arity, SNat n, FunArgs arity n) -> SBool) where
-  sbvUninterpret = error "TODO don't use"
-  uninterpret nm = f
-    where 
-      f (sa, sn, args)
-         = Internal.SBV $ Internal.SVal kBool $ Right $ Internal.cache result
-         where 
-               kBool = Internal.kindOf (Proxy @Bool)
-               kindList = replicate (sNatToInt  sa * sNatToInt sn) kBool
-               result st = do isSMT <- Internal.inSMTMode st
-                              Internal.newUninterpreted st nm (Internal.SBVType $ kindList ++ [kBool]) Nothing
-                              argSV <- (fmap concat)  $  forM (vecToList args sa) $ \bv -> forM (vecToList bv sn) $ Internal.sbvToSV st
-                              mapM_ Internal.forceSVArg argSV
-                              Internal.newExpr st kBool $ Internal.SBVApp (Internal.Uninterpreted nm) argSV
-
+-- 
 type One = S Z
 
 sOne :: SNat One
 sOne = SS SZ
 
-instance SBV.Uninterpreted ((SNat n, BitVector n) -> SBool) where
-  sbvUninterpret = error "TODO don't use"
-  uninterpret nm  = 
-    let 
-      (f :: (SNat One, SNat n, FunArgs One n) -> SBool) = SBV.uninterpret nm  
-      result (sn, bv) =  (f (sOne, sn, VCons bv VNil))
-          
-    in result 
     
--- makeBitVector :: [SBool] -> EBitVector 
+-- makeBitVector :: [Bit] -> EBitVector 
 -- makeBitVector [e] = EBitVector $ (BitVector e :: BitVector Z)
 -- makeBitVector (first : rest) = EBitVector $ BitVector (first, bvRest)
 --   where (EBitVector bvRest) = makeBitVector rest

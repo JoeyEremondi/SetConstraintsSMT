@@ -25,8 +25,7 @@ module MonadicTheorySolver where
 import SMTHelpers
 import Syntax 
 import TseitinPredicates
-import Data.SBV (SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>), Predicate, sNot, sTrue, sFalse, uninterpret)
-import qualified Data.SBV.Trans as SBV
+import Ersatz
 
 
 import Control.Monad.State
@@ -47,7 +46,6 @@ import ArgParse
 -- import Data.Graph
 import Data.Constraint (Dict(..))
 import GHC.Exts (sortWith)
-
 
 --Clauses asserting that our production checking function is correct
 --and asserting that each value in our domain is reachable through some production
@@ -94,21 +92,23 @@ import GHC.Exts (sortWith)
   -- return ()
 
 
+andAll :: [Bit] -> Bit
+andAll = Ersatz.all id
 
 --Return the constraint that all current quantified universals
 --are in the domain
-validDomain :: forall n . (BitVector n -> SBool) -> ConfigM n SBool
+validDomain :: forall n . (BitVector n -> Bit) -> ConfigM n Bit
 validDomain domain = do
   vars <- gets universalVars
   case vars of
-    [] -> return $ sTrue
+    [] -> return $ Ersatz.true
     _ -> do
       let varResults = map domain vars
-      return $ SBV.sAnd varResults
+      return $ andAll varResults
 
 -- enumerateDomain :: Integral i => SMT.Solver -> i -> [SExpr] -> IO [BitVector]
 -- enumerateDomain s numPreds bvType = do
---   SMT.simpleCommand s ["push"]
+--   SMT.simpleCommand s ["push"] 
 --   declareVec s "domain-val" bvType
 --   SMT.assert s $ domain $$$ [domainVal]
 --   ret <- helper []
@@ -245,10 +245,10 @@ defineConstructor ::
   -> (String, VecFun n)
 defineConstructor numPreds f numArgs pmap exprs =
   let 
-    (funForArgs :: [Vec (BitVector n) narity -> SBool] ) = map snd $ {-sortOn fst $ -}  
+    (funForArgs :: [Vec (BitVector n) narity -> Bit] ) = map snd $ {-sortOn fst $ -}  
       (flip map) exprs $ \ e ->  case (e) of
           (PVar _) -> 
-            let predNum = pmap Map.! e in (predNum, \ arg -> uninterpret  (f ++ "__" ++ show predNum) (numArgs, numPreds, arg)) 
+            let predNum = pmap Map.! e in (predNum, \ arg -> _  (f ++ "__" ++ show predNum) (numArgs, numPreds, arg)) 
           ( PFunApp g gargs) -> 
             let 
               retFun =
@@ -259,11 +259,11 @@ defineConstructor numPreds f numArgs pmap exprs =
                   --   (funFor e1 $$$ allArgs) /\ ((funFor e2) $$$ allArgs)
                   -- Neg e1 -> SMT.not ((funFor e1) $$$ allArgs)
                   True -> \ argVec ->
-                      SBV.sAnd $
+                      andAll $
                       map
                         (\(setArg, argVal) -> pSMT numPreds pmap setArg argVal)
                         $ zip gargs $ vecToList argVec numArgs
-                  False -> \ _ -> sFalse 
+                  False -> \ _ -> Ersatz.false 
             in (pmap Map.! e, retFun)
                           
     in  (f, VecFun f numArgs $ \ argVec -> makeSVec numPreds (map ($ argVec) funForArgs ))  
@@ -284,12 +284,12 @@ declareOrDefineFuns numPreds pmap exprs =
           (_ :: SNat nar) -> defineConstructor numPreds f sn_arity pmap exprs  
 
 declareDomain ::
-     forall n . SNat n ->  [(BitVector n -> SBool)] ->  BitVector n -> SBool
+     forall n . SNat n ->  [(BitVector n -> Bit)] ->  BitVector n -> Bit
 declareDomain numPreds boolDomPreds arg = 
   let 
-    domainToBeDefined = \ arg -> uninterpret "domainToBeDefined" (numPreds, arg)
+    domainToBeDefined = \ arg -> _ "domainToBeDefined" (numPreds, arg)
   in
-    domainToBeDefined  arg .&& SBV.sAnd [f arg | f <- boolDomPreds]
+    domainToBeDefined  arg Ersatz.&& andAll [f arg | f <- boolDomPreds]
   --Declare each of our existential variables 
   --Declare our domain function
   --We separate it into a quantified part and non quantified part
@@ -332,15 +332,15 @@ declareDomain numPreds boolDomPreds arg =
 --     sccInt = (exprInt . head . flattenSCC)
 
 --TODO include constratailint stuff
-makePredWithSize :: forall n .
+makePredWithSize :: forall n m .
      Options
   -> SNat n
-  -> (Literal -> SBool)
+  -> (Literal -> Bit)
   -> [Literal]
   -> [PredExpr]
-  -> SBool
+  -> Bit
   -> Int
-  -> SBV.Predicate --TODO return solution
+  -> StateT QSAT IO Bit --TODO return solution
 makePredWithSize options numPreds  litVarFor litList exprList  litPred theMaxArity
   --setOptions s
  = do
@@ -385,9 +385,9 @@ makePredWithSize options numPreds  litVarFor litList exprList  litPred theMaxAri
         --Assert that all our universal variables are in the domain
         isValidDomain <- validDomain theDomainFun
         funClauses <- forM (map snd funs) (funClause theDomainFun)
-        let singleFunClause = SBV.sAnd funClauses
+        let singleFunClause = andAll funClauses
         -- return $ isValidDomain ==> singleFunClause
-        let funDomPreds = (isValidDomain .=> singleFunClause)
+        let funDomPreds = (isValidDomain ==> singleFunClause)
             -- enumClauses <- enumeratedDomainClauses funPairs
         return
           ( funDomPreds
@@ -404,14 +404,14 @@ makePredWithSize options numPreds  litVarFor litList exprList  litPred theMaxAri
   --   declareVec s v bvType
   
   logIO "About do check SAT"
-  return $ (SBV.sAnd negPreds) .&& funDomPreds .&& litPred
+  return $ (andAll negPreds) Ersatz.&& funDomPreds Ersatz.&& litPred
   
 makePred ::  
   Options
-  -> (Literal -> SBool)
+  -> (Literal -> Bit)
   -> [Literal]
-  -> SBool
-  -> SBV.Predicate
+  -> Bit
+  -> StateT QSAT IO Bit
 makePred options  litVarFor litList  litPred = 
   let 
     subExprs = orderedSubExpressions litList
@@ -420,7 +420,6 @@ makePred options  litVarFor litList  litPred =
     theMaxArity = maxArity subExprs
   in case (toENat (length exprList)) of 
     (ENat (numPreds :: SNat n)) -> 
-      
         makePredWithSize options numPreds  litVarFor litList exprList  litPred  theMaxArity
 -- printAndReturnResult ::
 --      SMT.Solver

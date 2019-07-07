@@ -3,7 +3,6 @@ extra-package-dbs: []
 packages:
 - .
 extra-deps:
-  - sbv-8.3
-  - crackNum-2.3
+  - ersatz-0.4.7
   - constraints-0.11
 resolver: lts-12.26

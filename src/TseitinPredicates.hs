@@ -19,8 +19,7 @@
 module TseitinPredicates where
 
 import SMTHelpers
-import Data.SBV ( SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>), Predicate, sNot, sTrue, sFalse, uninterpret)
-import qualified Data.SBV.Trans as SBV
+import Ersatz 
 import Syntax 
 
 import Control.Monad.State
@@ -29,7 +28,7 @@ import qualified Data.List
 import qualified Data.Map as Map
 import Data.Map ((!))
 import qualified Data.Maybe as Maybe
-
+ 
 import Data.Char (isAlphaNum)
 import qualified Data.Set as Set
 
@@ -59,7 +58,7 @@ data PredNumConfig n = Config
 getNumPreds :: ConfigM n Int
 getNumPreds = sNatToInt <$> gets configNumPreds
 
-type ConfigM n = StateT (PredNumConfig n) (SBV.SymbolicT IO) 
+type ConfigM n = StateT (PredNumConfig n) (StateT QSAT IO) 
 
 getAllFunctions :: ConfigM n [VecFun n]
 getAllFunctions = gets (Map.elems . funVals)
@@ -67,22 +66,22 @@ getAllFunctions = gets (Map.elems . funVals)
 --Generate a function that takes a bit-vector x
 --and returns the SMT expression representing P_e(x)
 --
-pSMT :: SNat n -> Map.Map PredExpr Int -> Expr -> BitVector n -> SBool
+pSMT :: SNat n -> Map.Map PredExpr Int -> Expr -> BitVector n -> Bit
 pSMT numPreds pnums e x = 
   case e of
-    (Var e) ->
+    (Syntax.Var e) ->
       let i = pnums Map.! (PVar e)
       in ithElem i x (numPreds)
     (FunApp e1 e2) -> 
       let i = pnums Map.! (PFunApp e1 e2)
       in ithElem i x (numPreds)
-    (Union e1 e2) -> (pSMT numPreds pnums e1 x) .|| (pSMT numPreds pnums e2 x)
-    (Intersect e1 e2) -> (pSMT numPreds pnums e1 x) .&& (pSMT numPreds pnums e2 x)
-    (Neg e) -> sNot (pSMT numPreds pnums e x)
-    Top -> sTrue
-    Bottom -> sFalse
+    (Union e1 e2) -> (pSMT numPreds pnums e1 x) Ersatz.|| (pSMT numPreds pnums e2 x)
+    (Intersect e1 e2) -> (pSMT numPreds pnums e1 x) Ersatz.&& (pSMT numPreds pnums e2 x)
+    (Neg e) -> Ersatz.not (pSMT numPreds pnums e x)
+    Top -> Ersatz.true
+    Bottom -> Ersatz.false
 
-p :: Expr -> BitVector n -> ConfigM n SBool
+p :: Expr -> BitVector n -> ConfigM n Bit
 p e x = do
   config <- get
   return $ pSMT (configNumPreds config) (predNums config) e x 
@@ -130,17 +129,17 @@ funNamed f = do
 --           let gxs = bvApply n g xs
 --           lhs <- p e gxs
 --           return (lhs === SMT.bool False)
---       return $ eqCond .&& andAll neqConds
+--       return $ eqCond Ersatz.&& andAll neqConds
 --     _ -> return $ SMT.bool True
 
--- booleanDomainClause :: BitVector n -> Expr -> ConfigM n SBool
+-- booleanDomainClause :: BitVector n -> Expr -> ConfigM n Bit
 -- booleanDomainClause x e =
 --   case e of
 --     Var _ -> return $ sTrue
 --     Neg e2 -> do
 --       pe <- p e x
 --       pe2 <- p e2 x
---       return $ pe .== (sNot pe2)
+--       return $ pe .== (Ersatz.not pe2)
 --     Union a b -> do
 --       pe <- p e x
 --       pa <- p a x
@@ -150,20 +149,20 @@ funNamed f = do
 --       pe <- p e x
 --       pa <- p a x
 --       pb <- p b x
---       return $ pe .== (pa .&& pb)
+--       return $ pe .== (pa Ersatz.&& pb)
 --     Top -> p e x
 --     Bottom -> do
 --       px <- p e x
---       return $ sNot px
+--       return $ Ersatz.not px
 --     _ -> return $ sTrue
 
-posConstrClause :: (Literal -> SBool) -> Literal -> ConfigM n (BitVector n -> SBool)
+posConstrClause :: (Literal -> Bit) -> Literal -> ConfigM n (BitVector n -> Bit)
 posConstrClause litVarFor l@(Literal (e1, e2)) = do
   pnums <- gets predNums
   numPreds <- gets configNumPreds  
-  return $ \x -> (litVarFor l .=> ((pSMT numPreds pnums e1 x) .=> (pSMT numPreds pnums e2 x)))
+  return $ \x -> (litVarFor l ==> ((pSMT numPreds pnums e1 x) ==> (pSMT numPreds pnums e2 x)))
 
-negConstrClause :: (Literal -> SBool) -> SNat n -> (BitVector n -> SBool) -> Literal -> ConfigM n SBool
+negConstrClause :: (Literal -> Bit) -> SNat n -> (BitVector n -> Bit) -> Literal -> ConfigM n Bit
 negConstrClause litVarFor numPreds domain l@(Literal (e1, e2)) = do
   x <- existsBitVec numPreds
   pe1 <- p e1 x
@@ -171,10 +170,10 @@ negConstrClause litVarFor numPreds domain l@(Literal (e1, e2)) = do
   --Assert that each existential variable is in our domain
   let inDomain = domain x
   --And that it satisfies P_e1 and not P_e2 (i.e. e1 contains an element not in e2, i.e. e1 not subset of e2)
-  return $ (sNot  $ litVarFor l) .=> (inDomain .&& pe1 .&& (sNot pe2))
+  return $ (Ersatz.not  $ litVarFor l) ==> (inDomain Ersatz.&& pe1 Ersatz.&& (Ersatz.not pe2))
 
 --Assert that the given function is closed over the domain
-funClause :: forall n .  (BitVector n -> SBool) -> VecFun n -> ConfigM n SBool
+funClause :: forall n .  (BitVector n -> Bit) -> VecFun n -> ConfigM n Bit
 funClause domain f = do
   npreds <- gets configNumPreds
   xsList <- forallVars $ arity f

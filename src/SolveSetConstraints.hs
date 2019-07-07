@@ -12,6 +12,7 @@ import SMTHelpers
 import qualified Data.SBV as SMT
 import Data.SBV (SymVal, SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>), Predicate, sNot, sTrue, sFalse, uninterpret)
 import qualified Data.SBV.Trans as SBV
+import qualified Data.SBV.Trans.Control as Control
 
 import Syntax
 
@@ -74,9 +75,13 @@ solveSetConstraints options cInitial
   let defaultSolver = SBV.solver defaultConfig 
   let theSolver = 
         case (solver options) of
-          "z3" -> defaultSolver {SBV.options = (\c -> (if (verbose options) then ["-v:3"] else []) ++ SBV.options defaultSolver c ) }
+          "z3" -> defaultSolver
           "cvc4-fmf" -> defaultSolver {SBV.options = (\c -> ["--finite-model-find"] ++ SBV.options defaultSolver c ) }
           _ -> defaultSolver
+  let optList = 
+        case (solver options) of 
+          "z3" -> [Control.OptionKeyword ":smt.mbqi" ["true"]]
+          _ -> [] 
   let smtConfig = 
         defaultConfig 
           { SBV.solver = theSolver
@@ -84,6 +89,7 @@ solveSetConstraints options cInitial
           , SBV.transcript = if verbose options then Just "./transcript.out" else Nothing
           , SBV.satTrackUFs = False
           , SBV.isNonModelVar =  const True
+          , SBV.solverSetOptions = optList
           }
   --TODO: assert litFormula and makePred
   result <- SBV.isSatisfiableWith smtConfig $ do

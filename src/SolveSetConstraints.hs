@@ -85,7 +85,7 @@ solveSetConstraints options cInitial
           , SBV.satTrackUFs = False
           }
   --TODO: assert litFormula and makePred
-  result <- SBV.satWith smtConfig $ do
+  result <- SBV.isSatisfiableWith smtConfig $ do
     literalNames <- SBV.mkExistVars (length litList) 
     let litMap = Map.fromList $ flip zip literalNames $ litList
     let litFun l =
@@ -95,11 +95,10 @@ solveSetConstraints options cInitial
     let litFormula = formulaForCExpr litFun cComplete
     Solver.makePred options  litFun (Set.toList lits) litFormula
   case result of 
-    (SBV.SatResult (SBV.Satisfiable _ _)) -> return $ Right () --  <$> putStrLn "Found Solution"
-    (SBV.SatResult (SBV.Unsatisfiable _ _)) -> do
+    True -> return $ Right () --  <$> putStrLn "Found Solution"
+    False -> do
       -- when (verbose options) (SMT.simpleCommand s ["get-unsat-core"]) 
       return $ Left "Could not find solution to constraints"
-    s -> error $ "Unknown SAT result " ++ show s
   
     -- exprSubset lhs rhs = (Fun "literalValue") $$$ [exprFun lhs, exprFun rhs]
   where

@@ -83,6 +83,7 @@ solveSetConstraints options cInitial
           , SBV.verbose = verbose options
           , SBV.transcript = if verbose options then Just "./transcript.out" else Nothing
           , SBV.satTrackUFs = False
+          , SBV.isNonModelVar =  const True
           }
   --TODO: assert litFormula and makePred
   result <- SBV.isSatisfiableWith smtConfig $ do

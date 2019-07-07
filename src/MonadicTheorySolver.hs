@@ -48,6 +48,7 @@ import ArgParse
 import Data.Constraint (Dict(..))
 import GHC.Exts (sortWith)
 
+import Debug.Trace (trace)
 
 --Clauses asserting that our production checking function is correct
 --and asserting that each value in our domain is reachable through some production
@@ -243,9 +244,9 @@ defineConstructor ::
   -> Map.Map PredExpr Int
   -> [PredExpr]
   -> (String, VecFun n)
-defineConstructor numPreds f numArgs pmap exprs = 
+defineConstructor numPreds f numArgs pmap exprs = trace ("Define constructor numPreds: " ++ (show $ sNatToInt numPreds) ++ " with exprs " ++ show exprs) $ 
   let 
-    (funForArgs :: [(Int, SVec (Vec Bool n) narity -> SBool)] ) = sortOn fst $ 
+    (funForArgs :: [SVec (Vec Bool n) narity -> SBool] ) = map snd $ {-sortOn fst $ -}  
       (flip map) exprs $ \ e ->  case getInst numPreds @Bool of
         Dict -> case ( getInst numArgs @(Vec Bool n) , e) of
           (Dict, PVar _) -> 
@@ -267,7 +268,8 @@ defineConstructor numPreds f numArgs pmap exprs =
                           Dict -> vecToList argVec numArgs
                   False -> \ _ -> sFalse 
             in (pmap Map.! e, retFun)
-    in (f, VecFun f numArgs $ \ argVec -> makeSVec numPreds [fcomp argVec | (_, fcomp) <- funForArgs] )  
+                          
+    in trace ("FunForargs:  " ++ show (length funForArgs)) $  (f, VecFun f numArgs $ \ argVec -> makeSVec numPreds (map ($ argVec) funForArgs ))  
     
     
 
@@ -339,18 +341,17 @@ makePredWithSize :: forall n .
   -> SNat n
   -> (Literal -> SBool)
   -> [Literal]
+  -> [PredExpr]
   -> SBool
+  -> Int
   -> SBV.Predicate --TODO return solution
-makePredWithSize options numPreds litVarFor litList litPred
+makePredWithSize options numPreds  litVarFor litList exprList  litPred theMaxArity
   --setOptions s
  = do
   let log = if (verbose options) then (putStrLn . (";;;; " ++ )) else (\ _ -> return ())
       logIO s = liftIO $ log s 
-  let subExprs = orderedSubExpressions litList
-      -- (posList, negList) = List.partition isPos clist
-      theMaxArity = maxArity subExprs
-      numForall = theMaxArity
-      eqClasses =  Maybe.catMaybes $ map toPredExpr subExprs -- equalityClasses clist subExprs --TODO: bring this back?
+  
+  let numForall = theMaxArity
       -- constrNums = allExprNums subExprs
   (vars :: [BitVector n]) <- case (getInst numPreds @Bool) of
     Dict -> SBV.mkForallVars (theMaxArity )  
@@ -358,12 +359,12 @@ makePredWithSize options numPreds litVarFor litList litPred
   --Declare or define the functions for each constructor in our Herbrand universe
   logIO "Declaring constructors"
   
-  let allFreeVars :: [PredExpr] = filter isVar $ Maybe.catMaybes $ map toPredExpr subExprs  
+  let allFreeVars :: [PredExpr] = filter isVar exprList  
       -- boolDomArgName = "z_boolDomain"
       -- boolDomArg = nameToBits numPreds boolDomArgName
       
-      (predMap, _) = allExprNums $ map (\ x -> [x]) eqClasses
-      funs = declareOrDefineFuns numPreds  predMap eqClasses
+      (predMap, _) = allExprNums  exprList
+      funs = declareOrDefineFuns numPreds  predMap exprList
       state0 = 
         Config
         { predNums = predMap
@@ -376,6 +377,7 @@ makePredWithSize options numPreds litVarFor litList litPred
         
   logIO ("Lit Vars: " ++ show [(l, litVarFor l) | l <- litList]) 
   logIO ("Pred numbers: " ++ show (predNums state0))
+  logIO ("Pred exprs: " ++ show exprList ++ " with length " ++ show (length exprList))
   logIO $ "In theory solver, numBits: " ++ show  (sNatToInt numPreds)
   -- putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
   let comp = do
@@ -418,15 +420,20 @@ makePredWithSize options numPreds litVarFor litList litPred
   
 makePred :: 
   Options
-  -> Int
   -> (Literal -> SBool)
   -> [Literal]
   -> SBool
   -> SBV.Predicate
-makePred options i = 
-  case (toENat i) of 
+makePred options  litVarFor litList  litPred = 
+  let 
+    subExprs = orderedSubExpressions litList
+    exprList =  Maybe.catMaybes $ map toPredExpr subExprs -- equalityClasses clist subExprs --TODO: bring this back?
+  -- (posList, negList) = List.partition isPos clist
+    theMaxArity = maxArity subExprs
+  in case (toENat (length exprList)) of 
     (ENat (numPreds :: SNat n)) -> 
-      makePredWithSize options numPreds 
+      
+        makePredWithSize options numPreds  litVarFor litList exprList  litPred  theMaxArity
 -- printAndReturnResult ::
 --      SMT.Solver
 --   -> Options

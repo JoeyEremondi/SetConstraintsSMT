@@ -21,6 +21,7 @@
 module SMTHelpers where
 
 import Syntax
+import Debug.Trace (trace)
 
 import Control.Monad
 import Data.Char (digitToInt)
@@ -149,11 +150,12 @@ makeSVec :: forall a (n :: Nat) . (SymVal a) => SNat n -> [SBV a] -> SVec a n
 makeSVec sz@SZ [] = 
   case sz of
     (_ :: SNat Z) -> SMT.literal ()
-makeSVec ss@(SS npred d) (first:rest) = 
+makeSVec ss@(SS npred d) (first:rest) = trace ("Making vec length " ++ show (sNatToInt ss) ++ " from" ++ show (first:rest)) $ 
   case ss of
     (_ :: SNat (S n')) -> 
       case (makeSVec @a @n' npred rest, d @a ) of
         (vecRest, Dict) -> tuple (first, vecRest) 
+makeSVec sn l = error $ "Can't make vector of length" ++ show (sNatToInt  sn) ++ " from list of length " ++ show l
 
 type BitVector n = SVec Bool n 
 type FunArgs arity n = SVec (Vec Bool n) arity

@@ -51,6 +51,7 @@ solveSetConstraints options cInitial
  = do
   let log = if (verbose options) then (putStrLn . (";;;; " ++ )) else (\ _ -> return ())
   log $ "cInitial: " ++ show cInitial
+  log $ "Got initial expr list:" ++ show exprList 
   -- SMT.declareFun s "literalValue" litType SMT.tBool
   -- forM_ literalNames $ _ -- \(SMT.Atom ln) -> SMT.declare s ln SMT.tBool
   --Assert the SMT version of our expression
@@ -58,22 +59,23 @@ solveSetConstraints options cInitial
   log $
     "Done asserting formula, " ++
      show (Set.size lits) ++ " literals total"
-  log $
-    "Partitioned into " ++
-    show (length litPartitions) ++ " subproblems: " ++ show litPartitions
+  -- log $
+  --   "Partitioned into " ++
+  --   show (length litPartitions) ++ " subproblems: " ++ show litPartitions
   -- forM [(e1, e2) | e1 <- exprList, e2 <- exprList] $
   --   uncurry subsetLemmaFor
   log "Done asserting subset properties"
   -- assertTransitive
   -- log "Done asserting transitivity"
   let defaultConfig = SBV.z3
-  let defaultSolver = SBV.solver defaultConfig
-  let solver = defaultSolver {SBV.options = (\c -> "-v:3" : SBV.options defaultSolver c )}
+  let defaultSolver = SBV.solver defaultConfig 
+  let solver = defaultSolver {SBV.options = (\c -> "-v:3" : SBV.options defaultSolver c ) }
   let smtConfig = 
         defaultConfig 
           { SBV.solver = solver
           , SBV.verbose = verbose options
           , SBV.transcript = Just "./transcript.out"
+          , SBV.satTrackUFs = False
           }
   --TODO: assert litFormula and makePred
   result <- SBV.satWith smtConfig $ do
@@ -84,7 +86,7 @@ solveSetConstraints options cInitial
             Nothing -> error ("Key" ++ show l ++ " not in map " ++ show litMap)
             Just x -> x
     let litFormula = formulaForCExpr litFun cComplete
-    Solver.makePred options numPredInt litFun (Set.toList lits) litFormula
+    Solver.makePred options  litFun (Set.toList lits) litFormula
   case result of 
     (SBV.SatResult (SBV.Satisfiable _ _)) -> return $ Right () --  <$> putStrLn "Found Solution"
     (SBV.SatResult (SBV.Unsatisfiable _ _)) -> do
@@ -108,14 +110,14 @@ solveSetConstraints options cInitial
         [ (e1, [e2 | Literal (e1', e2) <- litList, e1' == e1])
         | Literal (e1, _) <- litList
         ]
-    litPartitions = partitionLiterals
+    -- litPartitions = partitionLiterals
     -- numBits = ceiling $ logBase 2 (toFloat $ Set.size lits)
     -- litType = replicate numBits SMT.tBool
     -- baseExprs = exprsInCExpr cBase
     -- baseExprList = Set.toList baseExprs
     exprs = exprsInCExpr cInitial
     exprList = Set.toList exprs
-    numPredInt = length exprList
+    -- numPredInt = length $ List.nub exprList
     -- exprMap = Map.fromList $ zip (exprList) [0 ..]
     -- exprFun = (intToBits numBits) . (exprMap Map.!)
     -- solverLoop i = do

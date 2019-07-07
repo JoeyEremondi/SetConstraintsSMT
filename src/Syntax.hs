@@ -120,11 +120,10 @@ orderedSubExpressions litList =
     (g, unVertex, unKey) = Graph.graphFromEdges edges
     topologicalOrder = Graph.topSort g
  
-allExprNums :: [[PredExpr]] -> (Map.Map PredExpr Int, Int)
-allExprNums sccList =
-  let sccPairs = zip sccList [0 ..]
-      exprPairs = [(e, num) | (elist, num) <- sccPairs, e <- elist]
-   in (Map.fromList exprPairs, length sccList)
+allExprNums :: [PredExpr] -> (Map.Map PredExpr Int, Int)
+allExprNums exprList =
+  let exprPairs = zip exprList [0 ..]
+   in (Map.fromList exprPairs, length exprList)
 
 maxArity :: [Expr] -> Int
 maxArity es = List.maximum $ (0 :) $ Maybe.mapMaybe getArity es

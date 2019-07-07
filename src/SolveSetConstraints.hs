@@ -9,9 +9,10 @@ import qualified Data.Set as Set
 import qualified MonadicTheorySolver as Solver
 import Numeric (showIntAtBase)
 import SMTHelpers
-import qualified Data.SBV as SMT
 import Data.SBV (SymVal, SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>), Predicate, sNot, sTrue, sFalse, uninterpret)
 import qualified Data.SBV.Trans as SBV
+import qualified Data.SBV.Trans.Control as Control 
+
 
 import Syntax
 
@@ -85,7 +86,7 @@ solveSetConstraints options cInitial
           , SBV.satTrackUFs = False
           }
   --TODO: assert litFormula and makePred
-  result <- SBV.isSatisfiableWith smtConfig $ do
+  result <- SBV.runSMTWith smtConfig $ do
     literalNames <- SBV.mkExistVars (length litList) 
     let litMap = Map.fromList $ flip zip literalNames $ litList
     let litFun l =
@@ -93,12 +94,16 @@ solveSetConstraints options cInitial
             Nothing -> error ("Key" ++ show l ++ " not in map " ++ show litMap)
             Just x -> x
     let litFormula = formulaForCExpr litFun cComplete
-    Solver.makePred options  litFun (Set.toList lits) litFormula
+    predToRun <- Solver.makePred options  litFun (Set.toList lits) litFormula
+    Control.query $ do
+      SBV.constrain predToRun
+      Control.checkSat
   case result of 
-    True -> return $ Right () --  <$> putStrLn "Found Solution"
-    False -> do
+    Control.Sat -> return $ Right () --  <$> putStrLn "Found Solution"
+    Control.Unsat -> do
       -- when (verbose options) (SMT.simpleCommand s ["get-unsat-core"]) 
       return $ Left "Could not find solution to constraints"
+    Control.Unk -> error "ERROR: Could not solve quantified formula"
   
     -- exprSubset lhs rhs = (Fun "literalValue") $$$ [exprFun lhs, exprFun rhs]
   where

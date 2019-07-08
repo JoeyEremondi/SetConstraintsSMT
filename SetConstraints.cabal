@@ -18,8 +18,7 @@ library
   exposed-modules: SetConstraints.Solve
   other-modules:     Syntax, SMTHelpers, TseitinPredicates, MonadicTheorySolver, SolveSetConstraints, TreeGrammar, ArgParse, Andersen
   build-depends:       base,
-                       sbv >= 8.3,
-                       crackNum >= 2.3,
+                       z3 >= 408.0,
                        constraints >= 0.11,
                        mtl,
                        containers,
@@ -34,9 +33,7 @@ executable set-constraint-solver
   other-modules:     Syntax, SMTHelpers, TseitinPredicates, MonadicTheorySolver, SolveSetConstraints, TreeGrammar, ArgParse, Andersen
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       
-                       sbv >= 8.3,
-                       crackNum >= 2.3,
-                       constraints >= 0.11,
+                       z3 >= 408.0,
                        optparse-applicative,
                        base,
                        mtl,

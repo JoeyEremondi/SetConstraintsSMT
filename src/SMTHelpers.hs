@@ -18,7 +18,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 
-module SMTHelpers where
+module SMTHelpers where 
 
 import Syntax
 
@@ -27,10 +27,8 @@ import Data.Data (Proxy(..))
 import Control.Monad
 import Data.Char (digitToInt)
 import qualified Data.List as List
-import qualified Data.SBV.Trans as SBV
-import qualified Data.SBV.Internals as Internal
+import qualified Z3.Monad as Z3
 
-import Data.SBV (SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>))
 import ArgParse
 
 import Data.Data (Data)
@@ -60,6 +58,51 @@ import Data.Constraint (Dict(..))
 --   forM bv $ \bit -> do
 --     v <- SBV.getExpr s bit
 --     return $ SBV.value v
+
+type SBool = Z3.Z3 Z3.AST
+
+sTrue :: SBool
+sTrue = Z3.mkTrue
+
+sFalse :: SBool
+sFalse = Z3.mkFalse
+
+sAnd :: [SBool] -> SBool
+sAnd ml = do
+  l <- forM ml id
+  Z3.mkAnd l 
+
+sOr :: [SBool] -> SBool
+sOr ml = do
+    l <- forM ml id
+    Z3.mkOr l 
+
+(.&&) :: SBool -> SBool -> SBool 
+ma .&& mb = do
+  a <- ma
+  b <- mb
+  Z3.mkAnd [a,b]
+
+(.||) :: SBool -> SBool -> SBool 
+ma .|| mb = do
+  a <- ma
+  b <- mb
+  Z3.mkOr [a,b]
+
+sNot :: SBool -> SBool
+sNot a = Z3.mkNot =<< a
+
+(.=>) :: SBool -> SBool -> SBool 
+ma .=> mb = do
+  a <- ma
+  b <- mb
+  Z3.mkImplies a b
+
+(.==) :: SBool -> SBool -> SBool 
+ma .== mb = do
+    a <- ma
+    b <- mb
+    Z3.mkIff a b
 
 data Nat = 
   Z | S Nat
@@ -166,7 +209,7 @@ data VecFun :: Nat -> * where
 arity (VecFun _ sn _) = sNatToInt sn
 vecFunName (VecFun name _ _) = name
 
-genVec :: (SBV.MonadSymbolic m) => (m a) -> SNat n -> m (Vec a n)
+genVec :: (Monad m) => (m a) -> SNat n -> m (Vec a n)
 genVec gen sz@SZ = return VNil
 genVec gen ss@(SS spred) = do
   tail <- genVec gen spred
@@ -194,40 +237,20 @@ vecToList (VCons h t) ss@(SS spred) =
     (_ :: SNat (S npred)) -> h : vecToList t spred 
 -- ithElem i (BitVector x) n = _ -- x !!! (fromInteger i)
 
-existsBitVec :: (SBV.MonadSymbolic m) =>  SNat n -> m (BitVector n)
-existsBitVec = genVec SBV.exists_
+existsBitVec :: (Z3.MonadZ3 m) =>  SNat n -> m (BitVector n)
+existsBitVec = genVec _
 
-forallBitVec :: (SBV.MonadSymbolic m) =>  SNat n -> m (BitVector n)
-forallBitVec = genVec SBV.forall_
+forallBitVec :: (Z3.MonadZ3 m) =>  SNat n -> m (BitVector n)
+forallBitVec = genVec _
 
-instance SBV.Uninterpreted ((SNat arity, SNat n, FunArgs arity n) -> SBool) where
-  sbvUninterpret = error "TODO don't use"
-  uninterpret nm = f
-    where 
-      f (sa, sn, args)
-         = Internal.SBV $ Internal.SVal kBool $ Right $ Internal.cache result
-         where 
-               kBool = Internal.kindOf (Proxy @Bool)
-               kindList = replicate (sNatToInt  sa * sNatToInt sn) kBool
-               result st = do isSMT <- Internal.inSMTMode st
-                              Internal.newUninterpreted st nm (Internal.SBVType $ kindList ++ [kBool]) Nothing
-                              argSV <- (fmap concat)  $  forM (vecToList args sa) $ \bv -> forM (vecToList bv sn) $ Internal.sbvToSV st
-                              mapM_ Internal.forceSVArg argSV
-                              Internal.newExpr st kBool $ Internal.SBVApp (Internal.Uninterpreted nm) argSV
+
 
 type One = S Z
 
 sOne :: SNat One
 sOne = SS SZ
 
-instance SBV.Uninterpreted ((SNat n, BitVector n) -> SBool) where
-  sbvUninterpret = error "TODO don't use"
-  uninterpret nm  = 
-    let 
-      (f :: (SNat One, SNat n, FunArgs One n) -> SBool) = SBV.uninterpret nm  
-      result (sn, bv) =  (f (sOne, sn, VCons bv VNil))
-          
-    in result 
+
     
 -- makeBitVector :: [SBool] -> EBitVector 
 -- makeBitVector [e] = EBitVector $ (BitVector e :: BitVector Z)

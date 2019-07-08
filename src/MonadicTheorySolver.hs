@@ -25,8 +25,7 @@ module MonadicTheorySolver where
 import SMTHelpers
 import Syntax 
 import TseitinPredicates
-import Data.SBV (SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>), Predicate, sNot, sTrue, sFalse, uninterpret)
-import qualified Data.SBV.Trans as SBV
+import qualified Z3.Monad as Z3
 
 
 import Control.Monad.State
@@ -104,7 +103,7 @@ validDomain domain = do
     [] -> return $ sTrue
     _ -> do
       let varResults = map domain vars
-      return $ SBV.sAnd varResults
+      return $ sAnd varResults
 
 -- enumerateDomain :: Integral i => SMT.Solver -> i -> [SExpr] -> IO [BitVector]
 -- enumerateDomain s numPreds bvType = do
@@ -248,7 +247,7 @@ defineConstructor numPreds f numArgs pmap exprs =
     (funForArgs :: [Vec (BitVector n) narity -> SBool] ) = map snd $ {-sortOn fst $ -}  
       (flip map) exprs $ \ e ->  case (e) of
           (PVar _) -> 
-            let predNum = pmap Map.! e in (predNum, \ arg -> uninterpret  (f ++ "__" ++ show predNum) (numArgs, numPreds, arg)) 
+            let predNum = pmap Map.! e in (predNum, \ arg -> _  (f ++ "__" ++ show predNum) (numArgs, numPreds, arg)) 
           ( PFunApp g gargs) -> 
             let 
               retFun =
@@ -259,7 +258,7 @@ defineConstructor numPreds f numArgs pmap exprs =
                   --   (funFor e1 $$$ allArgs) /\ ((funFor e2) $$$ allArgs)
                   -- Neg e1 -> SMT.not ((funFor e1) $$$ allArgs)
                   True -> \ argVec ->
-                      SBV.sAnd $
+                      sAnd $
                       map
                         (\(setArg, argVal) -> pSMT numPreds pmap setArg argVal)
                         $ zip gargs $ vecToList argVec numArgs
@@ -287,9 +286,9 @@ declareDomain ::
      forall n . SNat n ->  [(BitVector n -> SBool)] ->  BitVector n -> SBool
 declareDomain numPreds boolDomPreds arg = 
   let 
-    domainToBeDefined = \ arg -> uninterpret "domainToBeDefined" (numPreds, arg)
+    domainToBeDefined = \ arg -> _ "domainToBeDefined" (numPreds, arg)
   in
-    domainToBeDefined  arg .&& SBV.sAnd [f arg | f <- boolDomPreds]
+    domainToBeDefined  arg .&& sAnd [f arg | f <- boolDomPreds]
   --Declare each of our existential variables 
   --Declare our domain function
   --We separate it into a quantified part and non quantified part
@@ -340,7 +339,7 @@ makePredWithSize :: forall n .
   -> [PredExpr]
   -> SBool
   -> Int
-  -> SBV.Predicate --TODO return solution
+  -> SBool --TODO return solution
 makePredWithSize options numPreds  litVarFor litList exprList  litPred theMaxArity
   --setOptions s
  = do
@@ -369,12 +368,12 @@ makePredWithSize options numPreds  litVarFor litList exprList  litPred theMaxAri
         , universalVars = vars
         }
         
-  logIO ("Lit Vars: " ++ show [(l, litVarFor l) | l <- litList]) 
+  -- logIO ("Lit Vars: " ++ show [(l, litVarFor l) | l <- litList]) 
   logIO ("Pred numbers: " ++ show (predNums state0))
   logIO ("Pred exprs: " ++ show exprList ++ " with length " ++ show (length exprList))
   logIO $ "In theory solver, numBits: " ++ show  (sNatToInt numPreds)
   -- putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
-  let comp = do
+  let comp = do 
         -- boolDomPredList <- forM subExprs (booleanDomainClause boolDomArg)
         --Get the predicates for each positive constraint
         posConstrPreds <- forM litList (posConstrClause litVarFor)
@@ -385,7 +384,7 @@ makePredWithSize options numPreds  litVarFor litList exprList  litPred theMaxAri
         --Assert that all our universal variables are in the domain
         isValidDomain <- validDomain theDomainFun
         funClauses <- forM (map snd funs) (funClause theDomainFun)
-        let singleFunClause = SBV.sAnd funClauses
+        let singleFunClause = sAnd funClauses
         -- return $ isValidDomain ==> singleFunClause
         let funDomPreds = (isValidDomain .=> singleFunClause)
             -- enumClauses <- enumeratedDomainClauses funPairs
@@ -404,14 +403,14 @@ makePredWithSize options numPreds  litVarFor litList exprList  litPred theMaxAri
   --   declareVec s v bvType
   
   logIO "About do check SAT"
-  return $ (SBV.sAnd negPreds) .&& funDomPreds .&& litPred
+  (sAnd negPreds) .&& funDomPreds .&& litPred
   
 makePred ::  
   Options
   -> (Literal -> SBool)
   -> [Literal]
   -> SBool
-  -> SBV.Predicate
+  -> SBool
 makePred options  litVarFor litList  litPred = 
   let 
     subExprs = orderedSubExpressions litList

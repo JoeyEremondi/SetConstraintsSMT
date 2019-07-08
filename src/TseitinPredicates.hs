@@ -19,8 +19,7 @@
 module TseitinPredicates where
 
 import SMTHelpers
-import Data.SBV ( SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>), Predicate, sNot, sTrue, sFalse, uninterpret)
-import qualified Data.SBV.Trans as SBV
+
 import Syntax 
 
 import Control.Monad.State
@@ -34,6 +33,7 @@ import Data.Char (isAlphaNum)
 import qualified Data.Set as Set
 
 -- import Data.SBV.Tuple (untuple)
+import qualified Z3.Monad as Z3
 
 
 import Data.Graph
@@ -59,7 +59,9 @@ data PredNumConfig n = Config
 getNumPreds :: ConfigM n Int
 getNumPreds = sNatToInt <$> gets configNumPreds
 
-type ConfigM n = StateT (PredNumConfig n) (SBV.SymbolicT IO) 
+type ConfigM n = StateT (PredNumConfig n) Z3.Z3 
+
+deriving instance Z3.MonadZ3 (ConfigM n)
 
 getAllFunctions :: ConfigM n [VecFun n]
 getAllFunctions = gets (Map.elems . funVals)
@@ -160,7 +162,7 @@ funNamed f = do
 posConstrClause :: (Literal -> SBool) -> Literal -> ConfigM n (BitVector n -> SBool)
 posConstrClause litVarFor l@(Literal (e1, e2)) = do
   pnums <- gets predNums
-  numPreds <- gets configNumPreds  
+  numPreds <- gets configNumPreds   
   return $ \x -> (litVarFor l .=> ((pSMT numPreds pnums e1 x) .=> (pSMT numPreds pnums e2 x)))
 
 negConstrClause :: (Literal -> SBool) -> SNat n -> (BitVector n -> SBool) -> Literal -> ConfigM n SBool

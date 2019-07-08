@@ -3,8 +3,6 @@ extra-package-dbs: []
 packages:
 - .
 extra-deps:
-  - github : JoeyEremondi/sbv
-    commit: "9484ebf"
-  - crackNum-2.3
+  - z3-408.0
   - constraints-0.11
 resolver: lts-12.26

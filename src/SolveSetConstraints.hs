@@ -9,10 +9,7 @@ import qualified Data.Set as Set
 import qualified MonadicTheorySolver as Solver
 import Numeric (showIntAtBase)
 import SMTHelpers
-import qualified Data.SBV as SMT
-import Data.SBV (SymVal, SBV, SBool, Symbolic, STuple, (.==), (.&&), (.||), (.=>), Predicate, sNot, sTrue, sFalse, uninterpret)
-import qualified Data.SBV.Trans as SBV
-import qualified Data.SBV.Trans.Control as Control
+import qualified Z3.Monad as Z3
 
 import Syntax
 
@@ -25,8 +22,8 @@ formulaForCExpr :: (Literal -> SBool) -> CExpr -> SBool
 formulaForCExpr litIdentifierFor cexp =
   case cexp of
     (s1 `CSubset` s2) -> litIdentifierFor $ Literal (s1, s2)
-    (CAnd cexprs) -> SBV.sAnd $ map self cexprs
-    (COr cexprs) -> SBV.sOr $ map self cexprs
+    (CAnd cexprs) -> sAnd $ map self cexprs
+    (COr cexprs) -> sOr $ map self cexprs
     (c1 `CImplies` c2) -> self c1 .=> self c2
     (c1 `CIff` c2) -> self c1 .== self c2
     (CXor cexprs) -> error "TODO XOR" --"xor" $$ [self c1, self c2]
@@ -35,7 +32,7 @@ formulaForCExpr litIdentifierFor cexp =
     self = formulaForCExpr litIdentifierFor
 
 makeLemma :: (Literal -> SBool) -> [Constr] -> SBool
-makeLemma litNum clist = sNot $ SBV.sAnd $ map helper clist 
+makeLemma litNum clist = sNot $ sAnd $ map helper clist 
   where
     helper c =
       case c of
@@ -44,7 +41,7 @@ makeLemma litNum clist = sNot $ SBV.sAnd $ map helper clist
 
 
 
-solveSetConstraints :: Options -> (CExpr) -> IO (Either String ())
+solveSetConstraints :: Options -> (CExpr) -> IO (Either String ()) 
 solveSetConstraints options cInitial
   --Declare our inclusion function
   --
@@ -67,37 +64,14 @@ solveSetConstraints options cInitial
   log "Done asserting subset properties"
   -- assertTransitive
   -- log "Done asserting transitivity"
-  let defaultConfig = 
-        case (solver options) of
-          "z3" -> SBV.z3
-          "cvc4" -> SBV.cvc4
-          "cvc4-fmf" -> SBV.cvc4
-  let defaultSolver = SBV.solver defaultConfig 
-  let theSolver = 
-        case (solver options) of
-          "z3" -> defaultSolver
-          "cvc4-fmf" -> defaultSolver {SBV.options = (\c -> ["--finite-model-find"] ++ SBV.options defaultSolver c ) }
-          _ -> defaultSolver
-  let optList = 
-        case (solver options) of 
-          "z3" -> [Control.OptionKeyword ":smt.mbqi" ["true"]]
-          _ -> [] 
-  let smtConfig = 
-        defaultConfig 
-          { SBV.solver = theSolver
-          , SBV.verbose = verbose options
-          , SBV.transcript = if verbose options then Just "./transcript.out" else Nothing
-          , SBV.satTrackUFs = False
-          , SBV.isNonModelVar =  const True
-          , SBV.solverSetOptions = optList
-          }
+  
   --TODO: assert litFormula and makePred
-  result <- SBV.isSatisfiableWith smtConfig $ do
-    literalNames <- SBV.mkExistVars (length litList) 
+  result <- _ $ do
+    literalNames <- _mkExistVars (length litList) 
     let litMap = Map.fromList $ flip zip literalNames $ litList
     let litFun l =
           case (Map.lookup l litMap) of
-            Nothing -> error ("Key" ++ show l ++ " not in map " ++ show litMap)
+            Nothing -> error ("Key" ++ show l ++ " not in map " )
             Just x -> x
     let litFormula = formulaForCExpr litFun cComplete
     Solver.makePred options  litFun (Set.toList lits) litFormula
@@ -183,7 +157,7 @@ solveSetConstraints options cInitial
     --         (((Fun "literalValue") $$$ [BitVector arg1, BitVector arg2]) /\
     --          ((Fun "literalValue") $$$ [BitVector arg2, BitVector arg3])) .=>
     --         ((Fun "literalValue") $$$ [BitVector arg1, BitVector arg3])
-    --    in SMT.assert s $ fSBV.sOr typePairs bodyCond
+    --    in SMT.assert s $ fsOr typePairs bodyCond
     -- assertTransitive =
     --   forM
     --     [ (e1, e2, e3)

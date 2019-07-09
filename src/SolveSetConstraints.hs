@@ -74,7 +74,8 @@ solveSetConstraints options cInitial
             Nothing -> error ("Key" ++ show l ++ " not in map " )
             Just x -> return x
     let litFormula = formulaForCExpr litFun cComplete
-    Solver.makePred options  litFun (Set.toList lits) litFormula
+    pred <- Solver.makePred options  litFun (Set.toList lits) litFormula
+    Z3.assert pred
     Z3.check
   case result of 
     Z3.Sat -> return $ Right () --  <$> putStrLn "Found Solution"

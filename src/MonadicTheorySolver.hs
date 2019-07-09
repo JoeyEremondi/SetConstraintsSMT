@@ -44,7 +44,6 @@ import qualified Data.Set as Set
 import ArgParse
 
 -- import Data.Graph
-import Data.Constraint (Dict(..))
 import GHC.Exts (sortWith)
 
 
@@ -236,19 +235,21 @@ validDomain domain = do
 --         e -> error $ "TODO Failed quant " ++ show e
 
 defineConstructor ::
-  forall n narity . SNat n
+  forall n narity .
+     SNat n
   -> String 
   -> SNat narity
   -> Map.Map PredExpr Int
   -> [PredExpr]
-  -> (String, VecFun n)
-defineConstructor numPreds f numArgs pmap exprs =
-  let 
-    (funForArgs :: [Vec (BitVector n) narity -> SBool] ) = map snd $ {-sortOn fst $ -}  
-      (flip map) exprs $ \ e ->  case (e) of
-          (PVar _) -> 
-            let predNum = pmap Map.! e in (predNum, \ arg -> _  (f ++ "__" ++ show predNum) (numArgs, numPreds, arg)) 
-          ( PFunApp g gargs) -> 
+  -> Z3.Z3 (String, VecFun n)
+defineConstructor numPreds f numArgs pmap exprs = do
+    (funForArgs :: [(Int, Vec (BitVector n) narity -> SBool)] ) <- forM exprs $ \ e ->   
+      case (e) of
+          (PVar _) -> do
+              uf <-  uninterpret  f numArgs numPreds
+              let predNum = pmap Map.! e 
+              return (predNum, uf) 
+          ( PFunApp g gargs) -> do 
             let 
               retFun =
                 case f == g of
@@ -263,9 +264,9 @@ defineConstructor numPreds f numArgs pmap exprs =
                         (\(setArg, argVal) -> pSMT numPreds pmap setArg argVal)
                         $ zip gargs $ vecToList argVec numArgs
                   False -> \ _ -> sFalse 
-            in (pmap Map.! e, retFun)
+            return (pmap Map.! e, retFun)
                           
-    in  (f, VecFun f numArgs $ \ argVec -> makeSVec numPreds (map ($ argVec) funForArgs ))  
+    return (f, VecFun f numArgs $ \ argVec -> makeSVec numPreds (map ($ argVec) $ map snd $ sortOn fst funForArgs ))  
     
     
 
@@ -273,22 +274,20 @@ declareOrDefineFuns ::
   forall n . SNat n
   -> Map.Map PredExpr Int
   -> [PredExpr]
-  -> [(String, VecFun n)]
-declareOrDefineFuns numPreds pmap exprs = 
+  -> Z3.Z3 [(String, VecFun n)]
+declareOrDefineFuns numPreds pmap exprs = do
   let 
     funArities = Map.toList $ getArities  exprs 
-  in (flip map) funArities $ \(f,ar) -> 
+  forM funArities $ \(f,ar) -> 
       case toENat ar of
         (ENat sn_arity ) -> case sn_arity of
-          (_ :: SNat nar) -> defineConstructor numPreds f sn_arity pmap exprs  
+          (_ :: SNat nar) ->  defineConstructor numPreds f sn_arity pmap exprs  
 
 declareDomain ::
      forall n . SNat n ->  [(BitVector n -> SBool)] ->  BitVector n -> SBool
-declareDomain numPreds boolDomPreds arg = 
-  let 
-    domainToBeDefined = \ arg -> _ "domainToBeDefined" (numPreds, arg)
-  in
-    domainToBeDefined  arg .&& sAnd [f arg | f <- boolDomPreds]
+declareDomain numPreds boolDomPreds arg = do
+    domainToBeDefined <-  uninterpret "domainToBeDefined" (SS SZ) numPreds
+    (domainToBeDefined  (VCons arg VNil)) .&& sAnd [f arg | f <- boolDomPreds]
   --Declare each of our existential variables 
   --Declare our domain function
   --We separate it into a quantified part and non quantified part
@@ -331,24 +330,24 @@ declareDomain numPreds boolDomPreds arg =
 --     sccInt = (exprInt . head . flattenSCC)
 
 --TODO include constratailint stuff
-makePredWithSize :: forall n .
+makePredWithSizeAndVars :: forall n .
      Options
   -> SNat n
+  -> [BitVector n]
   -> (Literal -> SBool)
   -> [Literal]
   -> [PredExpr]
   -> SBool
   -> Int
   -> SBool --TODO return solution
-makePredWithSize options numPreds  litVarFor litList exprList  litPred theMaxArity
-  --setOptions s
+makePredWithSizeAndVars options numPreds vars litVarFor litList exprList  litPred theMaxArity
+  --setOptions s 
  = do
   let log = if (verbose options) then (putStrLn . (";;;; " ++ )) else (\ _ -> return ())
       logIO s = liftIO $ log s 
   
   let numForall = theMaxArity
       -- constrNums = allExprNums subExprs
-  (vars :: [BitVector n]) <- forM [1 .. theMaxArity] $ \_ -> forallBitVec numPreds 
   
   --Declare or define the functions for each constructor in our Herbrand universe
   logIO "Declaring constructors"
@@ -358,8 +357,8 @@ makePredWithSize options numPreds  litVarFor litList exprList  litPred theMaxAri
       -- boolDomArg = nameToBits numPreds boolDomArgName
       
       (predMap, _) = allExprNums  exprList
-      funs = declareOrDefineFuns numPreds  predMap exprList
-      state0 = 
+  funs <- declareOrDefineFuns numPreds  predMap exprList
+  let state0 = 
         Config
         { predNums = predMap
         , configNumPreds = numPreds
@@ -419,12 +418,12 @@ makePred options  litVarFor litList  litPred =
     theMaxArity = maxArity subExprs
   in case (toENat (length exprList)) of 
     (ENat (numPreds :: SNat n)) -> 
-      
-        makePredWithSize options numPreds  litVarFor litList exprList  litPred  theMaxArity
+        withNForalls theMaxArity numPreds $ \vars ->
+          makePredWithSizeAndVars options numPreds vars  litVarFor litList exprList  litPred  theMaxArity
 -- printAndReturnResult ::
 --      SMT.Solver
 --   -> Options
---   -> Int
+--   -> Int 
 --   -> [SExpr]
 --   -> PredNumConfig
 --   -> [VecFun]

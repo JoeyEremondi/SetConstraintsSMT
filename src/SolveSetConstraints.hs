@@ -66,20 +66,22 @@ solveSetConstraints options cInitial
   -- log "Done asserting transitivity"
   
   --TODO: assert litFormula and makePred
-  result <- _ $ do
-    literalNames <- _mkExistVars (length litList) 
+  result <- Z3.evalZ3 $ do
+    literalNames <- forM litList $ \ l -> Z3.mkFreshBoolVar "literal_"
     let litMap = Map.fromList $ flip zip literalNames $ litList
     let litFun l =
-          case (Map.lookup l litMap) of
+          case (Map.lookup l litMap) of 
             Nothing -> error ("Key" ++ show l ++ " not in map " )
-            Just x -> x
+            Just x -> return x
     let litFormula = formulaForCExpr litFun cComplete
     Solver.makePred options  litFun (Set.toList lits) litFormula
+    Z3.check
   case result of 
-    True -> return $ Right () --  <$> putStrLn "Found Solution"
-    False -> do
+    Z3.Sat -> return $ Right () --  <$> putStrLn "Found Solution"
+    Z3.Unsat -> do
       -- when (verbose options) (SMT.simpleCommand s ["get-unsat-core"]) 
       return $ Left "Could not find solution to constraints"
+    Z3.Undef -> error "Could not solve quantified constraints"
   
     -- exprSubset lhs rhs = (Fun "literalValue") $$$ [exprFun lhs, exprFun rhs]
   where

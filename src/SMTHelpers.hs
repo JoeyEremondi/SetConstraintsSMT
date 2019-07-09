@@ -12,17 +12,14 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 
 module SMTHelpers where 
 
 import Syntax
 
-import Data.Data (Proxy(..))
 
 import Control.Monad
 import Data.Char (digitToInt)
@@ -35,7 +32,6 @@ import Data.Data (Data)
 
 -- import Data.SBV.Tuple (tuple)
 
-import Data.Constraint (Dict(..))
 
 
 -- data VecFun = VecFun
@@ -209,12 +205,12 @@ data VecFun :: Nat -> * where
 arity (VecFun _ sn _) = sNatToInt sn
 vecFunName (VecFun name _ _) = name
 
-genVec :: (Monad m) => (m a) -> SNat n -> m (Vec a n)
-genVec gen sz@SZ = return VNil
-genVec gen ss@(SS spred) = do
-  tail <- genVec gen spred
-  head <- gen
-  return $ VCons head tail
+-- genVec :: (Monad m) => (m a) -> SNat n -> m (Vec a n)
+-- genVec gen sz@SZ = return VNil
+-- genVec gen ss@(SS spred) = do
+--   tail <- genVec gen spred
+--   head <- gen
+--   return $ VCons head tail
 
 ithElem :: forall a n .  Int -> Vec a n -> SNat n -> a
 -- ithElem 0 bv sz@SZ  = 
@@ -238,10 +234,33 @@ vecToList (VCons h t) ss@(SS spred) =
 -- ithElem i (BitVector x) n = _ -- x !!! (fromInteger i)
 
 existsBitVec :: (Z3.MonadZ3 m) =>  SNat n -> m (BitVector n)
-existsBitVec = genVec _
+existsBitVec sz@(SZ) = case sz of 
+  (_ :: SNat Z) -> return VNil
+existsBitVec ss@(SS spred) = case ss of 
+  (_ :: SNat (S npred)) -> do 
+    (tail :: BitVector npred) <- existsBitVec spred
+    head <-  Z3.mkFreshBoolVar "y_exists_"
+    return $ VCons (return head) (tail :: BitVector npred)
+  
+forallBitVec :: (Z3.MonadZ3 m) =>  SNat n -> m (BitVector n, [Z3.App])
+forallBitVec sz@(SZ) = case sz of 
+  (_ :: SNat Z) -> return (VNil, [])
+forallBitVec ss@(SS spred) = case ss of 
+  (_ :: SNat (S npred)) -> do 
+    (tail :: BitVector npred, apps) <- forallBitVec spred
+    head <-  Z3.mkFreshBoolVar "y_forall_"
+    app <- Z3.toApp head
+    return $  ( VCons (return head) (tail :: BitVector npred), app : apps )
 
-forallBitVec :: (Z3.MonadZ3 m) =>  SNat n -> m (BitVector n)
-forallBitVec = genVec _
+withNForalls ::  Int -> SNat n -> ([BitVector n] -> SBool) -> SBool 
+withNForalls i sn comp = do
+  varAppList <- forM [1 .. i ] $ \_ -> forallBitVec sn
+  let vars = map fst varAppList
+      apps = concatMap snd varAppList
+  result <- comp vars
+  Z3.mkForallConst [] apps result
+-- forallBitVec :: (Z3.MonadZ3 m) =>  SNat n -> m (BitVector n)
+-- forallBitVec = genVec _
 
 
 
@@ -250,7 +269,14 @@ type One = S Z
 sOne :: SNat One
 sOne = SS SZ
 
-
+uninterpret :: (Z3.MonadZ3 m) => String -> SNat narity -> SNat n -> m (FunArgs narity n -> SBool)
+uninterpret nm arity numPreds = do
+  boolSort <- Z3.mkBoolSort
+  let (sorts :: [Z3.Sort]) = replicate (sNatToInt arity * sNatToInt numPreds) boolSort
+  theFun <- Z3.mkFreshFuncDecl nm sorts boolSort
+  return $ \args -> do
+     bits <- mapM id $ concatMap (flip vecToList numPreds) $  vecToList args arity
+     Z3.mkApp theFun bits
     
 -- makeBitVector :: [SBool] -> EBitVector 
 -- makeBitVector [e] = EBitVector $ (BitVector e :: BitVector Z)

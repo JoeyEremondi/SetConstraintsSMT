@@ -37,7 +37,6 @@ import qualified Z3.Monad as Z3
 
 
 import Data.Graph
-import Data.Constraint (Dict(..))
 
 
 -- domain = Fun "domain"
@@ -61,7 +60,9 @@ getNumPreds = sNatToInt <$> gets configNumPreds
 
 type ConfigM n = StateT (PredNumConfig n) Z3.Z3 
 
-deriving instance Z3.MonadZ3 (ConfigM n)
+instance Z3.MonadZ3 (ConfigM n) where
+  getSolver = lift Z3.getSolver
+  getContext = lift Z3.getContext
 
 getAllFunctions :: ConfigM n [VecFun n]
 getAllFunctions = gets (Map.elems . funVals)
@@ -70,7 +71,7 @@ getAllFunctions = gets (Map.elems . funVals)
 --and returns the SMT expression representing P_e(x)
 --
 pSMT :: SNat n -> Map.Map PredExpr Int -> Expr -> BitVector n -> SBool
-pSMT numPreds pnums e x = 
+pSMT numPreds pnums e x =  
   case e of
     (Var e) ->
       let i = pnums Map.! (PVar e)

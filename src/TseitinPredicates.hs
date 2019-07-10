@@ -180,9 +180,10 @@ negConstrClause litVarFor numPreds domain l@(Literal (e1, e2)) = do
 funClause :: forall n .  (BitVector n -> SBool) -> VecFun n -> ConfigM n SBool
 funClause domain f = do
   npreds <- gets configNumPreds
-  xsList <- forallVars $ arity f
+  univs <- gets universalVars 
   case f of
     VecFun _ sn fun -> do
+      let xsList = take (sNatToInt sn) univs
       case sn of
         (_ :: SNat nar) -> do
             let xs = makeSVec sn xsList

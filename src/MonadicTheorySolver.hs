@@ -284,10 +284,11 @@ declareOrDefineFuns numPreds pmap exprs = do
           (_ :: SNat nar) ->  defineConstructor numPreds f sn_arity pmap exprs  
 
 declareDomain ::
-     forall n . SNat n ->  [(BitVector n -> SBool)] ->  BitVector n -> SBool
-declareDomain numPreds boolDomPreds arg = do
+     forall n m . (Z3.MonadZ3 m) => SNat n ->  [(BitVector n -> SBool)] ->  m (BitVector n -> SBool)
+declareDomain numPreds boolDomPreds = do
     domainToBeDefined <-  uninterpret "domainToBeDefined" (SS SZ) numPreds
-    (domainToBeDefined  (VCons arg VNil)) .&& sAnd [f arg | f <- boolDomPreds]
+    return $ \arg ->
+      (domainToBeDefined  (VCons arg VNil)) .&& sAnd [f arg | f <- boolDomPreds]
   --Declare each of our existential variables 
   --Declare our domain function
   --We separate it into a quantified part and non quantified part
@@ -377,7 +378,7 @@ makePredWithSizeAndVars options numPreds vars litVarFor litList exprList  litPre
         --Get the predicates for each positive constraint
         posConstrPreds <- forM litList (posConstrClause litVarFor)
         --Declare our domain function that ensures all values in the domain satisfy the positive constraints
-        let theDomainFun = declareDomain  numPreds  posConstrPreds
+        theDomainFun <- declareDomain  numPreds  posConstrPreds
         --Get the constraints asserting that there exist values in the domain satisfying the negative constraints
         negConstrPreds <- forM litList (negConstrClause litVarFor numPreds theDomainFun)
         --Assert that all our universal variables are in the domain

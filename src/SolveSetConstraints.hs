@@ -10,6 +10,7 @@ import qualified MonadicTheorySolver as Solver
 import Numeric (showIntAtBase)
 import SMTHelpers
 import qualified Z3.Monad as Z3
+import Control.Monad.IO.Class (liftIO)
 
 import Syntax
 
@@ -75,6 +76,9 @@ solveSetConstraints options cInitial
             Just x -> return x
     let litFormula = formulaForCExpr litFun cComplete
     pred <- Solver.makePred options  litFun (Set.toList lits) litFormula
+    when (verbose options) $ do
+      s <-  Z3.astToString pred
+      liftIO $ putStrLn s
     Z3.assert pred
     Z3.check
   case result of 

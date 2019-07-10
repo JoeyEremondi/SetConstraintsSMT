@@ -1,5 +1,6 @@
-(Intersect (Var "X") (Neg (FunApp "Cons" [Top, Top])), CAnd
-  [ CSubset (Var "D") (FunApp "Null" [])
+(CAnd
+  [ (CNot (CSubset (Intersect (Var "X") (Neg (FunApp "Cons" [Top, Top]))) Bottom) ),
+    CSubset (Var "D") (FunApp "Null" [])
   , CSubset (Var "X") (Union (FunApp "Cons" [Top, Top]) (FunApp "Null" []))
   , CImplies
       (CNot (CSubset (Intersect (FunApp "Null" []) (Var "X")) Bottom))

@@ -380,7 +380,11 @@ makePredWithSizeAndVars options numPreds vars litVarFor litList exprList  litPre
         --Declare our domain function that ensures all values in the domain satisfy the positive constraints
         theDomainFun <- declareDomain  numPreds  posConstrPreds
         --Get the constraints asserting that there exist values in the domain satisfying the negative constraints
-        negConstrPreds <- forM litList (negConstrClause litVarFor numPreds theDomainFun)
+        --Also Assert that our domain has not collapsed into emptiness
+        --Otherwise, literal constraints that are false will be seen as true
+        negConstrPreds <- forM litList  (negConstrClause litVarFor numPreds theDomainFun)
+        
+
         --Assert that all our universal variables are in the domain
         isValidDomain <- validDomain theDomainFun
         funClauses <- forM (map snd funs) (funClause theDomainFun)

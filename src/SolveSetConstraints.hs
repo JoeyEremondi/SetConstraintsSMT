@@ -43,7 +43,7 @@ makeLemma litNum clist = sNot $ sAnd $ map helper clist
 
 
 solveSetConstraints :: Options -> (CExpr) -> IO (Either String ()) 
-solveSetConstraints options cInitial
+solveSetConstraints options cWithoutNonTrivial
   --Declare our inclusion function
   --
  = do
@@ -93,7 +93,11 @@ solveSetConstraints options cInitial
   
     -- exprSubset lhs rhs = (Fun "literalValue") $$$ [exprFun lhs, exprFun rhs]
   where
-    
+    nonTrivial = (CNot $ Bottom `CSubset` Top)
+    cInitial = 
+          case cWithoutNonTrivial of
+            CAnd l -> CAnd $ nonTrivial : l
+            _ -> CAnd [nonTrivial, cWithoutNonTrivial]    
     cComplete = cInitial --We don't need a bunch of lemmas if we use Z3's SMT solver
       --And if we do, then we should assert them for the literal variables 
     -- CAnd [cInter, cTransitive] --TODO add more

@@ -93,7 +93,7 @@ solveSetConstraints options cWithoutNonTrivial
   
     -- exprSubset lhs rhs = (Fun "literalValue") $$$ [exprFun lhs, exprFun rhs]
   where
-    nonTrivial = (CNot $ Bottom `CSubset` Top)
+    nonTrivial = (CNot $ Top `CSubset` Bottom)
     cInitial = 
           case cWithoutNonTrivial of
             CAnd l -> CAnd $ nonTrivial : l

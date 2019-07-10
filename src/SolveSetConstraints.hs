@@ -82,8 +82,11 @@ solveSetConstraints options cInitial
     Z3.assert pred
     Z3.check
   case result of 
-    Z3.Sat -> return $ Right () --  <$> putStrLn "Found Solution"
+    Z3.Sat -> do
+      log $ ";; Found solution"
+      return $ Right () --  <$> putStrLn "Found Solution"
     Z3.Unsat -> do
+      log $ ";; Did not find solution"
       -- when (verbose options) (SMT.simpleCommand s ["get-unsat-core"]) 
       return $ Left "Could not find solution to constraints"
     Z3.Undef -> error "Could not solve quantified constraints"

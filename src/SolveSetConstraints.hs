@@ -19,6 +19,9 @@ import Data.Graph
 import Data.Tree (flatten)
 import Data.Tuple (swap)
 
+import  Z3.Opts
+
+
 formulaForCExpr :: (Literal -> SBool) -> CExpr -> SBool
 formulaForCExpr litIdentifierFor cexp =
   case cexp of
@@ -67,7 +70,16 @@ solveSetConstraints options cWithoutNonTrivial
   -- log "Done asserting transitivity"
   
   --TODO: assert litFormula and makePred
+  -- let verbosity  = if verbose options then (10 :: Int ) else 0
+  -- let opts = stdOpts +? (opt "trace" True) +? (opt "smt.mbqi" True)
   result <- Z3.evalZ3 $ do
+    Z3.push
+    params <- Z3.mkParams
+    mbqi <- Z3.mkStringSymbol ":smt.mbqi"
+    produceModels <- Z3.mkStringSymbol ":model"
+    Z3.paramsSetBool params mbqi True
+    Z3.paramsSetBool params produceModels (verbose options)
+    Z3.solverSetParams params
     literalNames <- forM litList $ \ l -> Z3.mkFreshBoolVar "literal_"
     let litMap = Map.fromList $ flip zip literalNames $ litList
     let litFun l =
@@ -76,11 +88,23 @@ solveSetConstraints options cWithoutNonTrivial
             Just x -> return x
     let litFormula = formulaForCExpr litFun cComplete
     pred <- Solver.makePred options  litFun (Set.toList lits) litFormula
+    
     when (verbose options) $ do
-      s <-  Z3.astToString pred
-      liftIO $ putStrLn s
+      dummy <- Z3.mkBool True
+      Z3.assert dummy
+      (result, Just model) <- Z3.solverCheckAndGetModel
+      liftIO $ putStrLn ("Result: " ++ show result )
+      -- funs <- Z3.getFuncs model
+      -- consts <- Z3.getConsts model
+      -- declStrings <- forM (funs ++ consts) Z3.funcDeclToString 
+      -- let decls = List.intercalate "\n;;\n" declStrings  
+      -- liftIO $ putStrLn $ ";;;;Model\n" ++ decls ++ "\n;;;End Model\n"
+      sPred <-  Z3.astToString pred
+      liftIO $ putStrLn sPred 
     Z3.assert pred
-    Z3.check
+    ret <- Z3.check
+    Z3.pop 1
+    return ret
   case result of 
     Z3.Sat -> do
       log $ ";; Found solution"
@@ -90,6 +114,7 @@ solveSetConstraints options cWithoutNonTrivial
       -- when (verbose options) (SMT.simpleCommand s ["get-unsat-core"]) 
       return $ Left "Could not find solution to constraints"
     Z3.Undef -> error "Could not solve quantified constraints"
+  
   
     -- exprSubset lhs rhs = (Fun "literalValue") $$$ [exprFun lhs, exprFun rhs]
   where

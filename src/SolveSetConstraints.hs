@@ -90,10 +90,10 @@ solveSetConstraints options cWithoutNonTrivial
     pred <- Solver.makePred options  litFun (Set.toList lits) litFormula
     
     when (verbose options) $ do
-      dummy <- Z3.mkBool True
-      Z3.assert dummy
-      (result, Just model) <- Z3.solverCheckAndGetModel
-      liftIO $ putStrLn ("Result: " ++ show result )
+      -- dummy <- Z3.mkBool True
+      -- Z3.assert dummy
+      -- (result, Just model) <- Z3.solverCheckAndGetModel
+      -- liftIO $ putStrLn ("Result: " ++ show result )
       -- funs <- Z3.getFuncs model
       -- consts <- Z3.getConsts model
       -- declStrings <- forM (funs ++ consts) Z3.funcDeclToString 

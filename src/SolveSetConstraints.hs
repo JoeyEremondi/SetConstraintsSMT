@@ -78,7 +78,7 @@ solveSetConstraints options cWithoutNonTrivial
     mbqi <- Z3.mkStringSymbol ":smt.mbqi"
     produceModels <- Z3.mkStringSymbol ":model"
     Z3.paramsSetBool params mbqi True
-    Z3.paramsSetBool params produceModels False
+    -- Z3.paramsSetBool params produceModels True
     Z3.solverSetParams params
     literalNames <- forM litList $ \ l -> Z3.mkFreshBoolVar "literal_"
     let litMap = Map.fromList $ flip zip literalNames $ litList

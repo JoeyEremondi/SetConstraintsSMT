@@ -78,7 +78,7 @@ solveSetConstraints options cWithoutNonTrivial
     mbqi <- Z3.mkStringSymbol ":smt.mbqi"
     produceModels <- Z3.mkStringSymbol ":model"
     Z3.paramsSetBool params mbqi True
-    Z3.paramsSetBool params produceModels False
+    Z3.paramsSetBool params produceModels (verbose options)
     Z3.solverSetParams params
     literalNames <- forM litList $ \ l -> Z3.mkFreshBoolVar "literal_"
     let litMap = Map.fromList $ flip zip literalNames $ litList
@@ -89,18 +89,18 @@ solveSetConstraints options cWithoutNonTrivial
     let litFormula = formulaForCExpr litFun cComplete
     pred <- Solver.makePred options  litFun (Set.toList lits) litFormula
     
-    -- when (verbose options) $ do
-    --   dummy <- Z3.mkBool True
-    --   Z3.assert dummy
-    --   (result, Just model) <- Z3.solverCheckAndGetModel
-    --   liftIO $ putStrLn ("Result: " ++ show result )
-    --   -- funs <- Z3.getFuncs model
-    --   -- consts <- Z3.getConsts model
-    --   -- declStrings <- forM (funs ++ consts) Z3.funcDeclToString 
-    --   -- let decls = List.intercalate "\n;;\n" declStrings  
-    --   -- liftIO $ putStrLn $ ";;;;Model\n" ++ decls ++ "\n;;;End Model\n"
-    --   sPred <-  Z3.astToString pred
-    --   liftIO $ putStrLn sPred 
+    when (verbose options) $ do
+      dummy <- Z3.mkBool True
+      Z3.assert dummy
+      (result, Just model) <- Z3.solverCheckAndGetModel
+      liftIO $ putStrLn ("Result: " ++ show result )
+      -- funs <- Z3.getFuncs model
+      -- consts <- Z3.getConsts model
+      -- declStrings <- forM (funs ++ consts) Z3.funcDeclToString 
+      -- let decls = List.intercalate "\n;;\n" declStrings  
+      -- liftIO $ putStrLn $ ";;;;Model\n" ++ decls ++ "\n;;;End Model\n"
+      sPred <-  Z3.astToString pred
+      liftIO $ putStrLn sPred 
     Z3.assert pred
     ret <- Z3.check
     Z3.pop 1

@@ -26,25 +26,24 @@ import Data.Tuple (swap)
 import  Z3.Opts
 
 
-formulaForCExpr :: (Literal -> SBool) -> CExpr -> SBool
+formulaForCExpr :: (Literal -> SBool) -> CExpr -> ZSBool
 formulaForCExpr litIdentifierFor cexp =
   case cexp of
-    (s1 `CSubset` s2) -> litIdentifierFor $ Literal (s1, s2)
-    (CAnd cexprs) -> sAnd $ map self cexprs
-    (COr cexprs) -> sOr $ map self cexprs
-    (c1 `CImplies` c2) -> self c1 .=> self c2
-    (c1 `CIff` c2) -> self c1 .== self c2
-    (CXor cexprs) -> error "TODO XOR" --"xor" $$ [self c1, self c2]
-    (CNot c1) -> sNot $ self c1
+    (s1 `CSubset` s2) -> return $ litIdentifierFor $ Literal (s1, s2)
+    (CAnd cexprs) -> sAnd =<< mapM self cexprs
+    (COr cexprs) -> sOr =<< mapM self cexprs
+    (c1 `CImplies` c2) -> self c1 ..=> self c2
+    (c1 `CIff` c2) -> self c1 ..== self c2
+    (CNot c1) -> sNot =<< self c1
   where
     self = formulaForCExpr litIdentifierFor
 
-makeLemma :: (Literal -> SBool) -> [Constr] -> SBool
-makeLemma litNum clist = sNot $ sAnd $ map helper clist 
+makeLemma :: (Literal -> SBool) -> [Constr] -> ZSBool
+makeLemma litNum clist = sNot =<< sAnd =<< mapM helper clist 
   where
     helper c =
       case c of
-        e1 `Sub` e2 -> litNum $ Literal (e1, e2)
+        e1 `Sub` e2 -> return $ litNum $ Literal (e1, e2)
         e1 `NotSub` e2 -> sNot $ litNum $ Literal (e1, e2)
 
 
@@ -93,8 +92,8 @@ solveSetConstraints options cWithoutNonTrivial
     let litFun l =
           case (Map.lookup l litMap) of 
             Nothing -> error ("Key" ++ show l ++ " not in map " )
-            Just x -> return x
-    let litFormula = formulaForCExpr litFun cComplete
+            Just x -> x
+    litFormula <- formulaForCExpr litFun cComplete
     pred <- Solver.makePred options  litFun (Set.toList lits) litFormula
     
     when (verbose options) $ do

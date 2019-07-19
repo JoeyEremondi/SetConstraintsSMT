@@ -177,7 +177,7 @@ negConstrClause litVarFor numPreds domain l@(Literal (e1, e2)) = do
   lift $ (return notLit) ..=> (domain x ..&& (return pe1) ..&& (sNot pe2))
 
 --Assert that the given function is closed over the domain
-funClause :: forall n .  (BitVector n -> SBool) -> VecFun n -> ConfigM n SBool
+funClause :: forall n .  (BitVector n -> ZSBool) -> VecFun n -> ConfigM n SBool
 funClause domain f = do
   npreds <- gets configNumPreds
   univs <- gets universalVars 
@@ -188,7 +188,7 @@ funClause domain f = do
         (_ :: SNat nar) -> do
             let xs = makeSVec sn xsList
             fxs <- lift $ fun xs
-            return $ domain fxs
+            lift $ domain fxs
 
 -- freshVecFun :: forall n . SNat n -> String -> Int -> VecFun n
 -- freshVecFun numBits name ar = 

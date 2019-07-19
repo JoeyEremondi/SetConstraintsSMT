@@ -95,13 +95,13 @@ import GHC.Exts (sortWith)
 
 --Return the constraint that all current quantified universals
 --are in the domain
-validDomain :: forall n . (BitVector n -> SBool) -> ConfigM n SBool
+validDomain :: forall n . (BitVector n -> ZSBool) -> ConfigM n SBool
 validDomain domain = do
   vars <- gets universalVars
   case vars of
     [] -> lift sTrue
     _ -> do
-      let varResults = map domain vars
+      varResults <- forM vars $ \v -> lift (domain v)
       lift $ sAnd varResults
 
 -- enumerateDomain :: Integral i => SMT.Solver -> i -> [SExpr] -> IO [BitVector]
@@ -287,11 +287,12 @@ declareOrDefineFuns numPreds pmap exprs = do
           (_ :: SNat nar) ->  defineConstructor numPreds f sn_arity pmap exprs  
 
 declareDomain ::
-     forall n m . (Z3.MonadZ3 m) => SNat n ->  [(BitVector n -> SBool)] ->  m (BitVector n -> SBool)
+     forall n m . (Z3.MonadZ3 m) => SNat n ->  [(BitVector n -> ZSBool)] ->  m (BitVector n -> ZSBool)
 declareDomain numPreds boolDomPreds = do
     domainToBeDefined <-  uninterpret "domainToBeDefined" (SS SZ) numPreds
-    return $ \arg ->
-      (domainToBeDefined  (VCons arg VNil)) .&& sAnd [f arg | f <- boolDomPreds]
+    return $ \arg -> do
+      argList <- forM boolDomPreds ($ arg)
+      (domainToBeDefined  (VCons arg VNil)) ..&& sAnd argList
   --Declare each of our existential variables 
   --Declare our domain function
   --We separate it into a quantified part and non quantified part
@@ -391,9 +392,9 @@ makePredWithSizeAndVars options numPreds vars litVarFor litList exprList  litPre
         --Assert that all our universal variables are in the domain
         isValidDomain <- validDomain theDomainFun
         funClauses <- forM (map snd funs) (funClause theDomainFun)
-        let singleFunClause = sAnd funClauses
+        singleFunClause <- lift $ sAnd funClauses
         -- return $ isValidDomain ==> singleFunClause
-        let funDomPreds = (isValidDomain .=> singleFunClause)
+        funDomPreds <- lift $ (isValidDomain .=> singleFunClause)
             -- enumClauses <- enumeratedDomainClauses funPairs
         return
           ( funDomPreds
@@ -410,14 +411,14 @@ makePredWithSizeAndVars options numPreds vars litVarFor litList exprList  litPre
   --   declareVec s v bvType
   
   logIO "About do check SAT"
-  (sAnd negPreds) .&& funDomPreds .&& litPred
+  (sAnd negPreds) ..&& (funDomPreds .&& litPred)
   
 makePred ::  
   Options
   -> (Literal -> SBool)
   -> [Literal]
   -> SBool
-  -> SBool
+  -> ZSBool
 makePred options  litVarFor litList  litPred = 
   let 
     subExprs = orderedSubExpressions litList

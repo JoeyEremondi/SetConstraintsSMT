@@ -273,13 +273,13 @@ forallBitVec ss@(SS spred) = case ss of
     app <- Z3.toApp head
     return $  ( VCons ( head) (tail :: BitVector npred), app : apps )
 
-withNForalls :: (Z3.MonadZ3 m) =>  Int -> SNat n -> ([BitVector n] -> SBool) -> m SBool 
-withNForalls 0 _ comp = return $ comp []
+withNForalls ::  Int -> SNat n -> ([BitVector n] -> ZSBool) -> ZSBool 
+withNForalls 0 _ comp = comp []
 withNForalls i sn comp = do
   varAppList <- forM [1 .. i ] $ \_ -> forallBitVec sn
   let vars = map fst varAppList
       apps = concatMap snd varAppList
-  let result = comp vars
+  result <- comp vars
   case sn of
     SZ -> return result
     _ -> 

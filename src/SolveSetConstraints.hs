@@ -84,8 +84,10 @@ solveSetConstraints options cWithoutNonTrivial
     params <- Z3.mkParams
     mbqi <- Z3.mkStringSymbol ":smt.mbqi"
     produceModels <- Z3.mkStringSymbol ":model"
+    doTrace <-  Z3.mkStringSymbol ":trace"
     Z3.paramsSetBool params mbqi True
-    Z3.paramsSetBool params produceModels (verbose options)
+    Z3.paramsSetBool params produceModels False
+    -- Z3.paramsSetBool params doTrace (verbose options)
     Z3.solverSetParams params
     literalNames <- forM litList $ \ l -> Z3.mkFreshBoolVar "literal_"
     let litMap = Map.fromList $ flip zip literalNames $ litList
@@ -110,7 +112,7 @@ solveSetConstraints options cWithoutNonTrivial
       liftIO $ putStrLn sPred 
     Z3.assert pred
     ret <- Z3.check
-    Z3.pop 1
+    Z3.reset
     return ret
   case result of 
     Z3.Sat -> do

@@ -79,7 +79,7 @@ solveSetConstraints options cWithoutNonTrivial
   --TODO: assert litFormula and makePred
   -- let verbosity  = if verbose options then (10 :: Int ) else 0
   -- let opts = stdOpts +? (opt "trace" True) +? (opt "smt.mbqi" True)
-  result <- Z3.evalZ3 $ do
+  result <- Z3.evalZ3With (Just Z3.UFBV) Z3.stdOpts  $ do
     Z3.push
     params <- Z3.mkParams
     mbqi <- Z3.mkStringSymbol ":smt.mbqi"

@@ -3,6 +3,7 @@ extra-package-dbs: []
 packages:
 - .
 extra-deps:
-  - z3-408.0
+  - github : JoeyEremondi/haskell-z3
+    commit: "1e342b4"
   - constraints-0.11
 resolver: lts-12.26

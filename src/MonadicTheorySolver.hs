@@ -99,10 +99,10 @@ validDomain :: forall n . (BitVector n -> SBool) -> ConfigM n SBool
 validDomain domain = do
   vars <- gets universalVars
   case vars of
-    [] -> return $ sTrue
+    [] -> lift sTrue
     _ -> do
       let varResults = map domain vars
-      return $ sAnd varResults
+      lift $ sAnd varResults
 
 -- enumerateDomain :: Integral i => SMT.Solver -> i -> [SExpr] -> IO [BitVector]
 -- enumerateDomain s numPreds bvType = do
@@ -243,7 +243,7 @@ defineConstructor ::
   -> [PredExpr]
   -> Z3.Z3 (String, VecFun n)
 defineConstructor numPreds f numArgs pmap exprs = do
-    (funForArgs :: [(Int, Vec (BitVector n) narity -> SBool)] ) <- forM exprs $ \ e ->   
+    (funForArgs  ) <- forM exprs $ \ e ->   
       case (e) of
           (PVar _) -> do
               uf <-  uninterpret  f numArgs numPreds
@@ -258,15 +258,18 @@ defineConstructor numPreds f numArgs pmap exprs = do
                   -- e1 `Intersect` e2 ->
                   --   (funFor e1 $$$ allArgs) /\ ((funFor e2) $$$ allArgs)
                   -- Neg e1 -> SMT.not ((funFor e1) $$$ allArgs)
-                  True -> \ argVec ->
-                      sAnd $
-                      map
-                        (\(setArg, argVal) -> pSMT numPreds pmap setArg argVal)
+                  True -> \ argVec -> do
+                      theList <- mapM (\(setArg, argVal) -> pSMT numPreds pmap setArg argVal)
                         $ zip gargs $ vecToList argVec numArgs
+                      sAnd theList
+                        
                   False -> \ _ -> sFalse 
             return (pmap Map.! e, retFun)
-                          
-    return (f, VecFun f numArgs $ \ argVec -> makeSVec numPreds (map ($ argVec) $ map snd $ sortOn fst funForArgs ))  
+    
+    return (f, VecFun f numArgs $ \ argVec -> do
+      let funList =  map snd $ sortOn fst funForArgs
+      funResults <- forM funList ($ argVec)
+      return $ makeSVec numPreds funResults)  
     
     
 
@@ -340,7 +343,7 @@ makePredWithSizeAndVars :: forall n .
   -> [PredExpr]
   -> SBool
   -> Int
-  -> SBool --TODO return solution
+  -> ZSBool --TODO return solution
 makePredWithSizeAndVars options numPreds vars litVarFor litList exprList  litPred theMaxArity
   --setOptions s 
  = do

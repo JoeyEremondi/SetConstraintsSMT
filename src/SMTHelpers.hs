@@ -55,47 +55,68 @@ import Data.Data (Data)
 --     v <- SBV.getExpr s bit
 --     return $ SBV.value v
 
-type SBool = Z3.Z3 Z3.AST
+type SBool = Z3.AST
 
-sTrue :: SBool
+type ZSBool = Z3.Z3 SBool
+
+sTrue :: ZSBool
 sTrue = Z3.mkTrue
 
-sFalse :: SBool
+sFalse :: ZSBool
 sFalse = Z3.mkFalse
 
-sAnd :: [SBool] -> SBool
+sAnd :: [SBool] -> ZSBool
 sAnd ml = do
-  l <- forM ml id
-  Z3.mkAnd l 
+  Z3.mkAnd ml 
 
-sOr :: [SBool] -> SBool
+sOr :: [SBool] -> ZSBool
 sOr ml = do
-    l <- forM ml id
-    Z3.mkOr l 
+    Z3.mkOr ml 
 
-(.&&) :: SBool -> SBool -> SBool 
+(.&&) :: SBool -> SBool -> ZSBool 
 ma .&& mb = do
+  Z3.mkAnd [ma,mb]
+
+(.||) :: SBool -> SBool -> ZSBool 
+ma .|| mb = do
+  Z3.mkOr [ma,mb]
+
+
+(..&&) :: ZSBool -> ZSBool -> ZSBool 
+ma ..&& mb = do
   a <- ma
   b <- mb
   Z3.mkAnd [a,b]
 
-(.||) :: SBool -> SBool -> SBool 
-ma .|| mb = do
+(..||) :: ZSBool -> ZSBool -> ZSBool 
+ma ..|| mb = do
   a <- ma
   b <- mb
   Z3.mkOr [a,b]
 
-sNot :: SBool -> SBool
-sNot a = Z3.mkNot =<< a
 
-(.=>) :: SBool -> SBool -> SBool 
+sNot :: SBool -> ZSBool
+sNot a = Z3.mkNot  a
+
+zNot :: ZSBool -> ZSBool
+zNot a = Z3.mkNot =<<  a
+
+(.=>) :: SBool -> SBool -> ZSBool 
 ma .=> mb = do
+  Z3.mkImplies ma mb
+
+(.==) :: SBool -> SBool -> ZSBool 
+ma .== mb = do
+    Z3.mkIff ma mb
+
+(..=>) :: ZSBool -> ZSBool -> ZSBool 
+ma ..=> mb = do
   a <- ma
   b <- mb
   Z3.mkImplies a b
 
-(.==) :: SBool -> SBool -> SBool 
-ma .== mb = do
+(..==) :: ZSBool -> ZSBool -> ZSBool 
+ma ..== mb = do
     a <- ma
     b <- mb
     Z3.mkIff a b
@@ -196,7 +217,7 @@ makeSVec ss@(SS npred) (first:rest) = --trace ("Making vec length " ++ show (sNa
 
 type BitVector n = Vec SBool n 
 type FunArgs arity n = Vec (BitVector n) arity
-type Constructor arity n = FunArgs arity n -> BitVector n
+type Constructor arity n = FunArgs arity n -> Z3.Z3 (BitVector n)
 type InDomain n = (BitVector n) -> SBool
 
 data VecFun :: Nat -> * where
@@ -240,7 +261,7 @@ existsBitVec ss@(SS spred) = case ss of
   (_ :: SNat (S npred)) -> do 
     (tail :: BitVector npred) <- existsBitVec spred
     head <-  Z3.mkFreshBoolVar "y_exists_"
-    return $ VCons (return head) (tail :: BitVector npred)
+    return $ VCons ( head) (tail :: BitVector npred)
   
 forallBitVec :: (Z3.MonadZ3 m) =>  SNat n -> m (BitVector n, [Z3.App])
 forallBitVec sz@(SZ) = case sz of 
@@ -250,15 +271,15 @@ forallBitVec ss@(SS spred) = case ss of
     (tail :: BitVector npred, apps) <- forallBitVec spred
     head <-  Z3.mkFreshBoolVar "y_forall_"
     app <- Z3.toApp head
-    return $  ( VCons (return head) (tail :: BitVector npred), app : apps )
+    return $  ( VCons ( head) (tail :: BitVector npred), app : apps )
 
-withNForalls ::  Int -> SNat n -> ([BitVector n] -> SBool) -> SBool 
-withNForalls 0 _ comp = comp []
+withNForalls :: (Z3.MonadZ3 m) =>  Int -> SNat n -> ([BitVector n] -> SBool) -> m SBool 
+withNForalls 0 _ comp = return $ comp []
 withNForalls i sn comp = do
   varAppList <- forM [1 .. i ] $ \_ -> forallBitVec sn
   let vars = map fst varAppList
       apps = concatMap snd varAppList
-  result <- comp vars
+  let result = comp vars
   case sn of
     SZ -> return result
     _ -> 
@@ -273,14 +294,16 @@ type One = S Z
 sOne :: SNat One
 sOne = SS SZ
 
-uninterpret :: (Z3.MonadZ3 m) => String -> SNat narity -> SNat n -> m (FunArgs narity n -> SBool)
+uninterpret :: (Z3.MonadZ3 m) => String -> SNat narity -> SNat n -> m (FunArgs narity n -> ZSBool)
 uninterpret nm arity numPreds = do
   boolSort <- Z3.mkBoolSort
   let (sorts :: [Z3.Sort]) = replicate (sNatToInt arity * sNatToInt numPreds) boolSort
   theFun <- Z3.mkFreshFuncDecl nm sorts boolSort
   return $ \args -> do
-     bits <- mapM id $ concatMap (flip vecToList numPreds) $  vecToList args arity
-     Z3.mkApp theFun bits
+    let bits = concatMap (flip vecToList numPreds) $  vecToList args arity
+    Z3.mkApp theFun bits
+    --  bits <- mapM id $ concatMap (flip vecToList numPreds) $  vecToList args arity
+    --  Z3.mkApp theFun bits
     
 -- makeBitVector :: [SBool] -> EBitVector 
 -- makeBitVector [e] = EBitVector $ (BitVector e :: BitVector Z)

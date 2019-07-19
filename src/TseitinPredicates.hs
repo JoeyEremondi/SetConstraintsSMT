@@ -70,25 +70,25 @@ getAllFunctions = gets (Map.elems . funVals)
 --Generate a function that takes a bit-vector x
 --and returns the SMT expression representing P_e(x)
 --
-pSMT :: SNat n -> Map.Map PredExpr Int -> Expr -> BitVector n -> SBool
+pSMT :: SNat n -> Map.Map PredExpr Int -> Expr -> BitVector n -> ZSBool
 pSMT numPreds pnums e x =  
   case e of
     (Var e) ->
       let i = pnums Map.! (PVar e)
-      in ithElem i x (numPreds)
+      in return $ ithElem i x (numPreds)
     (FunApp e1 e2) -> 
       let i = pnums Map.! (PFunApp e1 e2)
-      in ithElem i x (numPreds)
-    (Union e1 e2) -> (pSMT numPreds pnums e1 x) .|| (pSMT numPreds pnums e2 x)
-    (Intersect e1 e2) -> (pSMT numPreds pnums e1 x) .&& (pSMT numPreds pnums e2 x)
-    (Neg e) -> sNot (pSMT numPreds pnums e x)
+      in return $ ithElem i x (numPreds)
+    (Union e1 e2) -> (pSMT numPreds pnums e1 x) ..|| (pSMT numPreds pnums e2 x)
+    (Intersect e1 e2) -> (pSMT numPreds pnums e1 x) ..&& (pSMT numPreds pnums e2 x)
+    (Neg e) -> zNot (pSMT numPreds pnums e x)
     Top -> sTrue
     Bottom -> sFalse
 
 p :: Expr -> BitVector n -> ConfigM n SBool
 p e x = do
   config <- get
-  return $ pSMT (configNumPreds config) (predNums config) e x 
+  lift $ pSMT (configNumPreds config) (predNums config) e x 
 -- p e x = do
 --   n <- getNumPreds
 --   i <- gets ((Map.! e) . predNums)
@@ -160,21 +160,21 @@ funNamed f = do
 --       return $ sNot px
 --     _ -> return $ sTrue
 
-posConstrClause :: (Literal -> SBool) -> Literal -> ConfigM n (BitVector n -> SBool)
+posConstrClause :: (Literal -> SBool) -> Literal -> ConfigM n (BitVector n -> ZSBool)
 posConstrClause litVarFor l@(Literal (e1, e2)) = do
   pnums <- gets predNums
   numPreds <- gets configNumPreds   
-  return $ \x -> (litVarFor l .=> ((pSMT numPreds pnums e1 x) .=> (pSMT numPreds pnums e2 x)))
+  return $ \x -> ((return $ litVarFor l) ..=> ((pSMT numPreds pnums e1 x) ..=> (pSMT numPreds pnums e2 x)))
 
-negConstrClause :: (Literal -> SBool) -> SNat n -> (BitVector n -> SBool) -> Literal -> ConfigM n SBool
+negConstrClause :: (Literal -> SBool) -> SNat n -> (BitVector n -> ZSBool) -> Literal -> ConfigM n SBool
 negConstrClause litVarFor numPreds domain l@(Literal (e1, e2)) = do
   x <- existsBitVec numPreds
   pe1 <- p e1 x
   pe2 <- p e2 x
   --Assert that each existential variable is in our domain
-  let inDomain = domain x
+  notLit <- lift $ sNot  $ litVarFor l 
   --And that it satisfies P_e1 and not P_e2 (i.e. e1 contains an element not in e2, i.e. e1 not subset of e2)
-  return $ (sNot  $ litVarFor l) .=> (inDomain .&& pe1 .&& (sNot pe2))
+  lift $ (return notLit) ..=> (domain x ..&& (return pe1) ..&& (sNot pe2))
 
 --Assert that the given function is closed over the domain
 funClause :: forall n .  (BitVector n -> SBool) -> VecFun n -> ConfigM n SBool
@@ -187,7 +187,7 @@ funClause domain f = do
       case sn of
         (_ :: SNat nar) -> do
             let xs = makeSVec sn xsList
-            let fxs = fun xs
+            fxs <- lift $ fun xs
             return $ domain fxs
 
 -- freshVecFun :: forall n . SNat n -> String -> Int -> VecFun n

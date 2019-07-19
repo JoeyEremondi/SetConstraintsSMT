@@ -10,6 +10,10 @@ import qualified MonadicTheorySolver as Solver
 import Numeric (showIntAtBase)
 import SMTHelpers
 import qualified Z3.Monad as Z3
+import qualified Z3.Base as Z3Base
+import qualified Z3.Base.C as C
+
+
 import Control.Monad.IO.Class (liftIO)
 
 import Syntax
@@ -44,6 +48,8 @@ makeLemma litNum clist = sNot $ sAnd $ map helper clist
         e1 `NotSub` e2 -> sNot $ litNum $ Literal (e1, e2)
 
 
+        
+
 
 solveSetConstraints :: Options -> (CExpr) -> IO (Either String ()) 
 solveSetConstraints options cWithoutNonTrivial
@@ -68,6 +74,8 @@ solveSetConstraints options cWithoutNonTrivial
   log "Done asserting subset properties"
   -- assertTransitive
   -- log "Done asserting transitivity"
+  
+
   
   --TODO: assert litFormula and makePred
   -- let verbosity  = if verbose options then (10 :: Int ) else 0

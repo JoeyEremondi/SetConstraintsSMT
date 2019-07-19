@@ -56,7 +56,7 @@ solveSetConstraints s options cInitial
   let log = if (verbose options) then (putStrLn . (";;;; " ++ )) else (\ _ -> return ())
   log $ "cInitial: " ++ show cInitial
   log ";;;;;;;;START OF SMT FILE"
-  SMT.simpleCommand s ["set-logic", "UF"]
+  SMT.simpleCommand s ["set-logic", "UFBV"]
   when (solver options == "z3") $ do 
     SMT.simpleCommand s ["set-option", ":smt.mbqi", "true"]
     SMT.simpleCommand s ["set-option", ":produce-models", "false"]

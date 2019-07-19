@@ -419,6 +419,7 @@ makePred s options litVarFor litList
   log "Asserting function domain properties"
   SMT.assert s funDomPreds
   log "About do check SAT"
+  log ";;;;;;;;END OF SMT FILE"
   result <- SMT.check s
   --TODO minimize?
   case result of

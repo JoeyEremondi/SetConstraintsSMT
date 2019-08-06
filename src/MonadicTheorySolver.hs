@@ -84,15 +84,6 @@ withNForalls vars numBits comp = do
   where
     varTypes = [SMT.List [bit, SMT.tBool] | bv <- vars, bit <- bitList bv]
 
-withNExists ::
-    [BitVector] -> Integer -> ([BitVector] -> ConfigM SExpr) -> ConfigM SExpr
-withNExists vars numBits comp | numBits == 0 || null vars = comp []
-withNExists vars numBits comp = do
- result <- comp vars
- return $ SMT.List [SMT.Atom "exists", SMT.List varTypes, result]
- where
-   varTypes = [SMT.List [bit, SMT.tBool] | bv <- vars, bit <- bitList bv]
-
 --Return the constraint that all current quantified universals
 --are in the domain
 validDomain :: ConfigM SExpr
@@ -377,8 +368,6 @@ makePred s options litVarFor litList
       bvType = makeBvType numPreds
       vars =
         map (\i -> nameToBits numPreds $ "y_univ_" ++ show i) [1 .. numForall] 
-      evars =
-          [nameToBits numPreds $ "dom_ex"]  
       state0 = (initialState numPreds vars (Maybe.mapMaybe toPredExpr subExprs) $ map flattenSCC eqClasses)
       
       funs :: [VecFun] = Map.elems $ funVals state0
@@ -406,11 +395,10 @@ makePred s options litVarFor litList
             -- return $ isValidDomain ==> singleFunClause
             return $ (isValidDomain ==> singleFunClause)
             -- enumClauses <- enumeratedDomainClauses funPairs
-        domNonEmpty <- (fmap Maybe.catMaybes) $ forM funs constClause 
         return
           ( funDomPreds
           , andAll $ posConstrPreds {- ++ boolDomPredList -} 
-          , domNonEmpty ++ negConstrPreds)
+          , negConstrPreds)
   let ((funDomPreds, boolDomPreds, negPreds), state) = runState comp state0
   --Declare our domain function and its subfunctions
   log "Declaring domain"

@@ -406,13 +406,11 @@ makePred s options litVarFor litList
             -- return $ isValidDomain ==> singleFunClause
             return $ (isValidDomain ==> singleFunClause)
             -- enumClauses <- enumeratedDomainClauses funPairs
-        domNonEmpty <- case numPreds of
-          0 -> return $ SMT.bool True
-          _ -> withNExists evars (toInteger numPreds) $ \vars -> return $ domain $$$ vars 
+        domNonEmpty <- (fmap Maybe.catMaybes) $ forM funs constClause 
         return
           ( funDomPreds
           , andAll $ posConstrPreds {- ++ boolDomPredList -} 
-          , domNonEmpty : negConstrPreds)
+          , domNonEmpty ++ negConstrPreds)
   let ((funDomPreds, boolDomPreds, negPreds), state) = runState comp state0
   --Declare our domain function and its subfunctions
   log "Declaring domain"

@@ -156,6 +156,15 @@ funClause f = do
   let fxs = bvApply n f xs
   return $ domain $$$ [fxs]
 
+constClause :: VecFun -> ConfigM (Maybe SMT.SExpr)
+constClause f = do
+  case arity f of
+    0 -> do
+      n <- getNumPreds
+      let fxs = bvApply n f []
+      return $ Just $ domain $$$ [fxs]
+    _ -> return Nothing
+
 initialState :: Int -> [BitVector] -> [PredExpr] -> [[PredExpr]] -> PredNumConfig
 initialState numBits vars exprs connComps =
   let (predMap, numPreds) = allExprNums connComps

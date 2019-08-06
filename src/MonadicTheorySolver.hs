@@ -395,10 +395,11 @@ makePred s options litVarFor litList
             -- return $ isValidDomain ==> singleFunClause
             return $ (isValidDomain ==> singleFunClause)
             -- enumClauses <- enumeratedDomainClauses funPairs
+        constClauses <- (fmap Maybe.catMaybes) $ forM funs constClause 
         return
           ( funDomPreds
           , andAll $ posConstrPreds {- ++ boolDomPredList -} 
-          , negConstrPreds)
+          , constClauses ++ negConstrPreds)
   let ((funDomPreds, boolDomPreds, negPreds), state) = runState comp state0
   --Declare our domain function and its subfunctions
   log "Declaring domain"

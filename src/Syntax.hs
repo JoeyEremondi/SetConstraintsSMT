@@ -16,6 +16,11 @@ import qualified Data.Set as Set
 
 import qualified Data.Graph as Graph
 
+l !!! i = 
+  if i < (length l) 
+    then l List.!! i
+    else error ("Index " ++ show i ++ " too big for list " ++ show l)
+
 --listInDomain n l = andAll $ map (\i -> "domain" $$ [nthElem l i]) [0 .. n - 1]
 data Expr
   = Var String
@@ -30,12 +35,22 @@ data Expr
   | Bottom
   deriving (Eq, Ord, Show, Read)
 
+data PredExpr = 
+  PVar String
+  | PFunApp String [Expr]
+  deriving (Eq, Ord, Show, Read)
+
 data Constr
   = Sub Expr
         Expr
   | NotSub Expr
            Expr
   deriving (Eq, Ord, Show, Read)
+
+toPredExpr :: Expr -> Maybe PredExpr
+toPredExpr (Var v) = Just (PVar v)
+toPredExpr (FunApp s es) = Just (PFunApp s es)
+toPredExpr _ = Nothing 
 
 isPos :: Constr -> Bool
 isPos (Sub _ _) = True
@@ -64,20 +79,18 @@ children (FunApp f es) = es
 children Top = []
 children Bottom = []
 
-isVar (Var v) = True
+isVar (PVar v) = True
 isVar _ = False
 
-varName :: Expr -> String
-varName (Var v) = v
+varName :: PredExpr -> String
+varName (PVar v) = v
 
 type SubExprs = [Expr]
 
-constrDepEdges :: [Constr] -> ([Expr], [(Expr, [Expr])])
-constrDepEdges clist = (allExprs, mergedPairs)
+constrDepEdges :: [Literal] -> ([Expr], [(Expr, [Expr])])
+constrDepEdges litList = (allExprs, mergedPairs)
   where
-    sides (Sub x y) = [x, y]
-    sides (NotSub x y) = [x, y]
-    rawPairs = [edge | c <- clist, e <- sides c, edge <- exprDepEdges e]
+    rawPairs = [edge | Literal (e1, e2) <- litList, e <- [e1, e2], edge <- exprDepEdges e]
     allExprs = List.nub $ map fst rawPairs
     mergedPairs =
       List.nub
@@ -94,20 +107,20 @@ constrDepEdges clist = (allExprs, mergedPairs)
 isCycle (Graph.CyclicSCC _) = True
 isCycle _ = False
 
-orderedSubExpressions :: [Constr] -> [Expr]
-orderedSubExpressions clist =
+orderedSubExpressions :: [Literal] -> [Expr]
+orderedSubExpressions litList =
   if (length topologicalOrder == length allExprs)
     then map ((\(x, _, _) -> x) . unVertex) $ reverse $ topologicalOrder
     else error "Graph is not acyclic"
   where
-    (allExprs, pairs) = constrDepEdges clist
+    (allExprs, pairs) = constrDepEdges litList
     rawExprNums = Map.fromList $ zip allExprs [0 ..]
     exprNum = (rawExprNums Map.!)
     edges = map (\(e, es) -> (e, exprNum e, map exprNum es)) pairs
     (g, unVertex, unKey) = Graph.graphFromEdges edges
     topologicalOrder = Graph.topSort g
 
-allExprNums :: [[Expr]] -> (Map.Map Expr Integer, Int)
+allExprNums :: [[PredExpr]] -> (Map.Map PredExpr Integer, Int)
 allExprNums sccList =
   let sccPairs = zip sccList [0 ..]
       exprPairs = [(e, num) | (elist, num) <- sccPairs, e <- elist]
@@ -119,10 +132,10 @@ maxArity es = List.maximum $ (0 :) $ Maybe.mapMaybe getArity es
     getArity (FunApp f x) = Just $ length x
     getArity _ = Nothing
 
-getArities :: [Expr] -> Map.Map String Int
+getArities :: [PredExpr] -> Map.Map String Int
 getArities exprs = Map.fromList $ Maybe.mapMaybe appPair exprs
   where
-    appPair (FunApp f l) = Just (f, length l)
+    appPair (PFunApp f l) = Just (f, length l)
     appPair _ = Nothing
 
 constrNot :: Constr -> Constr
@@ -167,10 +180,11 @@ withProjection :: String -> Int -> Projection -> (Expr -> CExpr) -> CExpr
 withProjection freshName arity proj f =
   let args =
         map (\i -> Var $ freshName ++ "_projarg" ++ show i) [0 .. arity - 1]
-      projVar = args List.!! (projArgNum proj)
+      projVar = args !!! (projArgNum proj)
+      tops = map (\_ -> Top) args
       result = f projVar
       --Assert that our expression is equal to the function applied to some fresh variables
-      projConstr = (FunApp (projFun proj) args) `eq` (projOf proj)
+      projConstr = (FunApp (projFun proj) args) `eq` (projOf proj `Intersect` (FunApp (projFun proj) tops))
       --Assert that the variable arguments are empty iff the RHS is empty
       --This is necessary, since F(X1...Xk) is empty if any Xi is empty
       projEqConstr =

@@ -10,6 +10,9 @@ import Control.Monad
 import Data.Char (digitToInt)
 import qualified Data.List as List
 import qualified SimpleSMT as SMT
+import ArgParse
+
+
 
 data VecFun = VecFun
   { vecFunName :: String
@@ -69,8 +72,9 @@ funToBitFuns n f = map Fun $ nameToBitNames n (vecFunName f)
 (Fun f) $$ args = SMT.List (SMT.Atom f : args)
 
 ($$$) :: Fun -> [BitVector] -> SMT.SExpr
-(Fun f) $$$ [] = (SMT.Atom f)
-(Fun f) $$$ args = SMT.List (SMT.Atom f : concatMap bitList args)
+(Fun f) $$$ args = case concatMap bitList args of
+  [] -> SMT.Atom f
+  l -> SMT.List (SMT.Atom f : l)
 
 --map SMT.List $ List.transpose ((unwrap $ nameToBits n vf) : map unwrap args)
 bvApply :: Integral i => i -> VecFun -> [BitVector] -> BitVector
@@ -149,3 +153,34 @@ forAll :: [(SMT.SExpr, SMT.SExpr)] -> SMT.SExpr -> SMT.SExpr
 forAll typePairs body = SMT.List [SMT.Atom "forall", types, body]
   where
     types = SMT.List $ map (\(x, y) -> SMT.List [x, y]) typePairs
+
+
+makeSolver opts = do
+  let vb = verbose opts
+  l <-
+    SMT.newLogger $
+    if vb
+      then 0
+      else 10
+  case (solver opts) of
+    "cvc4-fmf" ->
+      SMT.newSolver
+        "cvc4"
+        ["--lang=smt2", "--incremental", "--fmf-bound", "--mbqi=default"]
+        (Just l)
+    "cvc4" -> SMT.newSolver "cvc4" ["--lang=smt2", "--incremental"] (Just l)
+    "boolector" ->
+      SMT.newSolver
+        "boolector"
+        ["--smt2", "--incremental", "--smt2-model"]
+        (Just l)
+    "veriT" ->
+      SMT.newSolver
+        "veriT"
+        [ "--proof-file-from-input"
+        , "--input=smtlib2"
+        , "--output=smtlib2"
+        , "--disable-banner"
+        ]
+        (Just l)
+    _ -> SMT.newSolver "z3" ["-in", "-st", "-v:10"] (Just l)

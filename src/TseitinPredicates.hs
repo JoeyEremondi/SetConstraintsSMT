@@ -6,7 +6,7 @@ import Syntax
 
 import Control.Monad.State
 import qualified Data.Data as Data
-import Data.List as List
+import qualified Data.List 
 import qualified Data.Map as Map
 import Data.Map ((!))
 import qualified Data.Maybe as Maybe
@@ -25,7 +25,7 @@ funDomain = Fun "functionDomain"
 
 -- type SBVec = SMT.BitVec
 data PredNumConfig = Config
-  { predNums :: Map.Map Expr Integer
+  { predNums :: Map.Map PredExpr Integer
   , configNumPreds :: Int
   , funVals :: Map.Map String VecFun
   , universalVars :: [BitVector]
@@ -40,14 +40,35 @@ type ConfigM = State PredNumConfig
 getAllFunctions :: ConfigM [VecFun]
 getAllFunctions = gets (Map.elems . funVals)
 
+--Generate a function that takes a bit-vector x
+--and returns the SMT expression representing P_e(x)
+--
+pSMT :: PredNumConfig -> Expr -> BitVector -> SMT.SExpr
+pSMT config e x = 
+  case e of
+    (Var e) ->
+      let i = (predNums config) Map.! (PVar e)
+      in ithBit i x (configNumPreds config)
+    (FunApp e1 e2) -> 
+      let i = (predNums config) Map.! (PFunApp e1 e2)
+      in ithBit i x (configNumPreds config)
+    (Union e1 e2) -> (pSMT config e1 x) \/ (pSMT config e2 x)
+    (Intersect e1 e2) -> (pSMT config e1 x) /\ (pSMT config e2 x)
+    (Neg e) -> SMT.not (pSMT config e x)
+    Top -> SMT.bool True
+    Bottom -> SMT.bool False
+
 p :: Expr -> BitVector -> ConfigM SMT.SExpr
 p e x = do
-  n <- getNumPreds
-  i <- gets ((Map.! e) . predNums)
-    -- let xi = SMT.extract x (toInteger i) (toInteger i)
-  return $ ithBit i x n
+  config <- get
+  return $ pSMT config e x 
+-- p e x = do
+--   n <- getNumPreds
+--   i <- gets ((Map.! e) . predNums)
+--     -- let xi = SMT.extract x (toInteger i) (toInteger i)
+--   return $ ithBit i x n
 
-ithBit i (BitVector x) n = x List.!! (fromInteger i)
+ithBit i (BitVector x) n = x !!! (fromInteger i)
 
 forallVar :: ConfigM BitVector
 forallVar = head <$> forallVars 1
@@ -65,27 +86,27 @@ funNamed f = do
   funs <- gets funVals
   return $ funs Map.! f
 
-functionDomainClause :: Expr -> ConfigM SMT.SExpr
-functionDomainClause e = do
-  n <- getNumPreds
-  case e of
-    FunApp fname args -> do
-      f <- funNamed fname
-      xs <- forallVars (length args)
-      let fxs = bvApply n f xs
-      lhs <- p e fxs
-      rhs <- forM (zip args xs) $ \(ex, x) -> p ex x
-        --Need constraint that no g(...) is in f(...) set
-      let eqCond = andAll rhs === lhs
-      gs <- differentFuns f
-      neqConds <-
-        forM gs $ \(g, ar) -> do
-          xs <- forallVars ar
-          let gxs = bvApply n g xs
-          lhs <- p e gxs
-          return (lhs === SMT.bool False)
-      return $ eqCond /\ andAll neqConds
-    _ -> return $ SMT.bool True
+-- functionDomainClause :: Expr -> ConfigM SMT.SExpr
+-- functionDomainClause e = do
+--   n <- getNumPreds
+--   case e of
+--     FunApp fname args -> do
+--       f <- funNamed fname
+--       xs <- forallVars (length args)
+--       let fxs = bvApply n f xs
+--       lhs <- p e fxs
+--       rhs <- forM (zip args xs) $ \(ex, x) -> p ex x
+--         --Need constraint that no g(...) is in f(...) set
+--       let eqCond = andAll rhs === lhs
+--       gs <- differentFuns f
+--       neqConds <-
+--         forM gs $ \(g, ar) -> do
+--           xs <- forallVars ar
+--           let gxs = bvApply n g xs
+--           lhs <- p e gxs
+--           return (lhs === SMT.bool False)
+--       return $ eqCond /\ andAll neqConds
+--     _ -> return $ SMT.bool True
 
 booleanDomainClause :: BitVector -> Expr -> ConfigM SMT.SExpr
 booleanDomainClause x e =
@@ -111,18 +132,21 @@ booleanDomainClause x e =
       return $ SMT.not px
     _ -> return $ SMT.bool True
 
-posConstrClause :: BitVector -> Constr -> ConfigM SMT.SExpr
-posConstrClause x (e1 `Sub` e2) = do
+posConstrClause :: (Literal -> SMT.SExpr) -> BitVector -> Literal -> ConfigM SMT.SExpr
+posConstrClause litVarFor x l@(Literal (e1, e2)) = do
   pe1 <- p e1 x
   pe2 <- p e2 x
-  return $ pe1 ==> pe2
+  return $ (litVarFor l ==> (pe1 ==> pe2))
 
-negConstrClause :: Integral i => i -> Constr -> ConfigM SMT.SExpr
-negConstrClause numPreds (e1 `NotSub` e2) = do
+negConstrClause :: Integral i => (Literal -> SMT.SExpr) -> i -> Literal -> ConfigM SMT.SExpr
+negConstrClause litVarFor numPreds l@(Literal (e1, e2)) = do
   x <- fresh numPreds
   pe1 <- p e1 x
   pe2 <- p e2 x
-  return $ pe1 /\ (SMT.not pe2)
+  --Assert that each existential variable is in our domain
+  let inDomain = domain $$$ [x]
+  --And that it satisfies P_e1 and not P_e2 (i.e. e1 contains an element not in e2, i.e. e1 not subset of e2)
+  return $ (SMT.not  $ litVarFor l) ==> (inDomain /\ pe1 /\ (SMT.not pe2))
 
 --Assert that the given function is closed over the domain
 funClause :: VecFun -> ConfigM SMT.SExpr
@@ -132,6 +156,16 @@ funClause f = do
   let fxs = bvApply n f xs
   return $ domain $$$ [fxs]
 
+constClause :: VecFun -> ConfigM (Maybe SMT.SExpr)
+constClause f = do
+  case arity f of
+    0 -> do
+      n <- getNumPreds
+      let fxs = bvApply n f []
+      return $ Just $ domain $$$ [fxs]
+    _ -> return Nothing
+
+initialState :: Int -> [BitVector] -> [PredExpr] -> [[PredExpr]] -> PredNumConfig
 initialState numBits vars exprs connComps =
   let (predMap, numPreds) = allExprNums connComps
    in Config
@@ -140,7 +174,7 @@ initialState numBits vars exprs connComps =
         , funVals =
             Map.fromList
               [ (f, VecFun f (replicate ar [0 .. numBits - 1]))
-              | (f, ar) <- Map.toList $ getArities exprs
+              | (f, ar) <- Map.toList $ getArities  exprs 
               ]
         , universalVars = vars
         , existentialVars = []

@@ -10,7 +10,8 @@ import System.Environment
 import ArgParse
 import Data.Semigroup
 import Options.Applicative
-import SolveSetConstraints
+import SolveSetConstraints 
+import SMTHelpers (makeSolver) 
 
 zero = "zero"
 
@@ -66,42 +67,18 @@ main = do
     -- Cons(T,T) /\ X == {} => C2 = {}
     -- D = C1 \/ C2
   inConstrsString <- readFile (inFile options)
-  let (inConstrs :: (Expr, CExpr)) =
+  let (inConstrs@(e,c) :: (Expr, CExpr)) =
         case parseBanshee options of
           False -> read inConstrsString
           True -> (Var "XDummy", parseBansheeString inConstrsString)
+  let constr = CAnd [c, (CNot (e `CSubset` Bottom))]
   s <- makeSolver options
   -- solveSetConstraints s1 cset
   -- solveSetConstraints s1 goodCheck
-  solveSetConstraints s options inConstrs
+  eitherRet <- solveSetConstraints s options constr
+  case eitherRet of
+    Left s -> putStrLn (";;;; " ++ s)
+    Right _ -> putStrLn ";;;; Solution found"
   -- putStrLn $ show result
 
-makeSolver opts = do
-  let vb = verbose opts
-  l <-
-    SMT.newLogger $
-    if vb
-      then 0
-      else 10
-  case (solver opts) of
-    "cvc4-fmf" ->
-      SMT.newSolver
-        "cvc4"
-        ["--lang=smt2", "--incremental", "--fmf-bound", "--mbqi=default"]
-        (Just l)
-    "cvc4" -> SMT.newSolver "cvc4" ["--lang=smt2", "--incremental"] (Just l)
-    "boolector" ->
-      SMT.newSolver
-        "boolector"
-        ["--smt2", "--incremental", "--smt2-model"]
-        (Just l)
-    "veriT" ->
-      SMT.newSolver
-        "veriT"
-        [ "--proof-file-from-input"
-        , "--input=smtlib2"
-        , "--output=smtlib2"
-        , "--disable-banner"
-        ]
-        (Just l)
-    _ -> SMT.newSolver "z3" ["-in", "-st", "-v:10"] (Just l)
+

@@ -9,6 +9,7 @@ import Syntax
 import TseitinPredicates
 
 import Control.Monad.State
+import Control.Monad (when)
 import qualified Data.Data as Data
 import Data.List as List
 import qualified Data.Map as Map
@@ -76,17 +77,23 @@ declareProdFuncions s numPreds bvType funs maxArity =
 
 withNForalls ::
      [BitVector] -> Integer -> ([BitVector] -> ConfigM SExpr) -> ConfigM SExpr
+withNForalls vars numBits comp | numBits == 0 || null vars = comp []
 withNForalls vars numBits comp = do
   result <- comp vars
   return $ SMT.List [SMT.Atom "forall", SMT.List varTypes, result]
   where
     varTypes = [SMT.List [bit, SMT.tBool] | bv <- vars, bit <- bitList bv]
 
+--Return the constraint that all current quantified universals
+--are in the domain
 validDomain :: ConfigM SExpr
 validDomain = do
   vars <- gets universalVars
-  let varResults = map (\x -> domain $$$ [x]) vars
-  return $ andAll varResults
+  case vars of
+    [] -> return $ SMT.bool True
+    _ -> do
+      let varResults = map (\x -> domain $$$ [x]) vars
+      return $ andAll varResults
 
 enumerateDomain :: Integral i => SMT.Solver -> i -> [SExpr] -> IO [BitVector]
 enumerateDomain s numPreds bvType = do
@@ -99,16 +106,16 @@ enumerateDomain s numPreds bvType = do
   where
     domainVal = nameToBits numPreds "domain-val"
     helper accum = do
-      putStrLn "Doing check in theory solver"
+      putStrLn ";;;; Doing check in theory solver"
       result <- SMT.check s
-      putStrLn "Done check in theory solver"
+      putStrLn ";;;; Done check in theory solver"
       case result of
         SMT.Sat -> do
           valueExpr <- getBitVec s domainVal
           SMT.assert s (SMT.not (domainVal `vecEq` valueExpr))
           helper (valueExpr : accum)
         SMT.Unsat -> return accum
-        e -> error $ "TODO Failed quant enumerating domain" ++ show e
+        e -> error $ ";;;; TODO Failed quant enumerating domain" ++ show e
 
 --To enumerate through our productions
 enumerateProductions ::
@@ -196,7 +203,7 @@ enumerateProductions s bvType funs
     --     SMT.Unsat -> return accum
     --     _ -> error "TODO Failed quant"
 
-varProductions :: SMT.Solver -> Expr -> Integer -> Int -> IO [BitVector]
+varProductions :: SMT.Solver -> PredExpr -> Integer -> Int -> IO [BitVector]
 varProductions s v i n = do
   SMT.simpleCommand s ["push"]
   declareVec s vname $ makeBvType n
@@ -224,7 +231,7 @@ declareOrDefineFuns ::
   -> t
   -> [SExpr]
   -> PredNumConfig
-  -> [SCC Expr]
+  -> [SCC PredExpr]
   -> IO [[()]]
 declareOrDefineFuns s numPreds bvType state sccs = do
   let funs = Map.elems $ funVals state
@@ -234,15 +241,15 @@ declareOrDefineFuns s numPreds bvType state sccs = do
     let allArgs =
           map (\arg -> nameToBits numPreds $ ("f-arg-" ++ show arg)) allArgNums
     let funBitNames = funToBitFuns numPreds f
-    let bitFor expr = (predNums state) Map.! expr
+    let bitFor expr =  (predNums state) Map.! expr
     let funFor e =
           case fromIntegral i < length funBitNames of
-            True -> (funBitNames List.!! (fromIntegral i))
+            True -> (funBitNames !!! (fromIntegral i))
           where
             i = bitFor e
     let canDefine scc =
           case scc of
-            AcyclicSCC (Var _) -> False
+            AcyclicSCC (PVar _) -> False
             AcyclicSCC _ -> True
             CyclicSCC _ -> False --TODO check for self-reference
         (toDefine, toDeclare) = partition canDefine sccs
@@ -253,7 +260,7 @@ declareOrDefineFuns s numPreds bvType state sccs = do
       -- putStrLn $ "Declaring SCC" ++ show (flattenSCC scc) ++ "for " ++ show f
      ->
       case scc of
-        AcyclicSCC expr@(Var _) -> do
+        AcyclicSCC expr@(PVar v) -> do
           declareFun
             s
             (funFor expr)
@@ -274,23 +281,22 @@ declareOrDefineFuns s numPreds bvType state sccs = do
         AcyclicSCC expr
           -- putStrLn $ "** Defining function for " ++ show expr
          -> do
+          let (PFunApp g gargs) = expr
           let funBody =
-                case expr of
-                  e1 `Union` e2 ->
-                    ((funFor e1) $$$ allArgs) \/ ((funFor e2) $$$ allArgs)
-                  e1 `Intersect` e2 ->
-                    (funFor e1 $$$ allArgs) /\ ((funFor e2) $$$ allArgs)
-                  Neg e1 -> SMT.not ((funFor e1) $$$ allArgs)
-                  FunApp g gargs
-                    | vecFunName f == g ->
+                case vecFunName f == g of
+                  -- e1 `Union` e2 ->
+                  --   ((funFor e1) $$$ allArgs) \/ ((funFor e2) $$$ allArgs)
+                  -- e1 `Intersect` e2 ->
+                  --   (funFor e1 $$$ allArgs) /\ ((funFor e2) $$$ allArgs)
+                  -- Neg e1 -> SMT.not ((funFor e1) $$$ allArgs)
+                  True ->
                       andAll $
                       map
-                        (\(setArg, inputArg) ->
-                           ithBit (bitFor setArg) inputArg numPreds)
+                        (\(setArg, argVal) -> pSMT state setArg argVal)
                         (zip gargs allArgs)
-                    | vecFunName f /= g -> SMT.bool False
-                  Top -> SMT.bool True
-                  Bottom -> SMT.bool False
+                  False -> SMT.bool False
+                  -- Top -> SMT.bool True
+                  -- Bottom -> SMT.bool False
           let argPairs =
                 concatMap
                   (\argName ->
@@ -305,13 +311,19 @@ declareDomain s numPreds bvType boolDomPreds boolDomArgName
   --Declare each of our existential variables 
   --Declare our domain function
   --We separate it into a quantified part and non quantified part
- =
+ = do
+  SMT.declareFun 
+    s
+    "domainToBeSolved"
+     bvType
+    SMT.tBool
+  let bitNames = nameToBitNames numPreds boolDomArgName
   SMT.defineFun
     s
     "domain"
-    (zip (nameToBitNames numPreds boolDomArgName) bvType)
+    (zip bitNames bvType)
     SMT.tBool
-    boolDomPreds
+    (boolDomPreds `SMT.and`  ((Fun "domainToBeSolved") $$ (map SMT.Atom bitNames)))
   -- SMT.declareFun s "functionDomain" bvType SMT.tBool
   --TODO split into separate functions
   -- let domainArgName = "arg-domain"
@@ -323,93 +335,98 @@ declareDomain s numPreds bvType boolDomPreds boolDomArgName
   --   SMT.tBool $
   --   (booleanDomain $$$ [domainArg]) /\ (funDomain $$$ [domainArg])
 
-equalityClasses :: [Constr] -> [Expr] -> [SCC Expr]
-equalityClasses constrs exprs = sortedSCCs
-  where
-    edges =
-      [(e1, e1, List.nub [e2 | Sub e e2 <- constrs, e == e1]) | e1 <- exprs]
-    sortWithinSCC (AcyclicSCC e) = AcyclicSCC e
-    sortWithinSCC (CyclicSCC l) = CyclicSCC $ sortWith exprInt l
-    theSCCs = map AcyclicSCC exprs --stronglyConnComp edges
-    sortedSCCs = sortWith sccInt $ map sortWithinSCC $ theSCCs
-    exprMap = Map.fromList $ zip exprs [0 ..]
-    exprInt = (exprMap Map.!)
-    sccInt = (exprInt . head . flattenSCC)
+--TODO: make this work with single-SAT solver?
+-- equalityClasses :: [Constr] -> [Expr] -> [SCC Expr]
+-- equalityClasses constrs exprs = sortedSCCs
+--   where
+--     edges =
+--       [(e1, e1, List.nub [e2 | Sub e e2 <- constrs, e == e1]) | e1 <- exprs]
+--     sortWithinSCC (AcyclicSCC e) = AcyclicSCC e
+--     sortWithinSCC (CyclicSCC l) = CyclicSCC $ sortWith exprInt l
+--     theSCCs = map AcyclicSCC exprs --stronglyConnComp edges
+--     sortedSCCs = sortWith sccInt $ map sortWithinSCC $ theSCCs
+--     exprMap = Map.fromList $ zip exprs [0 ..]
+--     exprInt = (exprMap Map.!)
+--     sccInt = (exprInt . head . flattenSCC)
 
 --TODO include constratailint stuff
 makePred ::
      SMT.Solver
   -> Options
-  -> (Expr, [Constr])
+  -> (Literal -> SMT.SExpr)
+  -> [Literal]
   -> IO (Either [Constr] TreeGrammar) --TODO return solution
-makePred s options (nonEmpty, initialCList)
+makePred s options litVarFor litList
   --setOptions s
  = do
-  let clist = (nonEmpty `NotSub` Bottom) : initialCList
-      subExprs = orderedSubExpressions clist
-      (posList, negList) = List.partition isPos clist
+  let log = if (verbose options) then (putStrLn . (";;;; " ++ )) else (\ _ -> return ())
+  let subExprs = orderedSubExpressions litList
+      -- (posList, negList) = List.partition isPos clist
       theMaxArity = maxArity subExprs
-      numForall = 2 + theMaxArity
+      numForall = theMaxArity
       -- constrNums = allExprNums subExprs
       bvType = makeBvType numPreds
       vars =
-        map (\i -> nameToBits numPreds $ "y_univ_" ++ show i) [1 .. numForall]
-      state0 = (initialState numPreds vars subExprs $ map flattenSCC eqClasses)
+        map (\i -> nameToBits numPreds $ "y_univ_" ++ show i) [1 .. numForall] 
+      state0 = (initialState numPreds vars (Maybe.mapMaybe toPredExpr subExprs) $ map flattenSCC eqClasses)
+      
       funs :: [VecFun] = Map.elems $ funVals state0
-      allFreeVars :: [Expr] = filter isVar subExprs
+      allFreeVars :: [PredExpr] = filter isVar $ Maybe.catMaybes $ map toPredExpr subExprs  
       boolDomArgName = "z_boolDomain"
       boolDomArg = nameToBits numPreds boolDomArgName
-      eqClasses = equalityClasses clist subExprs
-      numPreds = length eqClasses
-  putStrLn $ "In theory solver, numBits: " ++ show numPreds
-  putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
+      eqClasses = map AcyclicSCC  $ Maybe.catMaybes $ map toPredExpr subExprs -- equalityClasses clist subExprs --TODO: bring this back?
+      numPreds =  length eqClasses
+  log ("Lit Vars: " ++ show [(l, litVarFor l) | l <- litList]) 
+  log ("Pred numbers: " ++ show (predNums state0))
+  log $ "In theory solver, numBits: " ++ show numPreds
+  -- putStrLn $ "Can reduce into " ++ show (length $ eqClasses)
   let comp = do
-        boolDomPredList <- forM subExprs (booleanDomainClause boolDomArg)
-        posConstrPreds <- forM posList (posConstrClause boolDomArg)
-        negConstrPreds <- forM negList (negConstrClause numPreds)
+        -- boolDomPredList <- forM subExprs (booleanDomainClause boolDomArg)
+        posConstrPreds <- forM litList (posConstrClause litVarFor boolDomArg)
+        negConstrPreds <- forM litList (negConstrClause litVarFor numPreds)
         funDomPreds <-
-          withNForalls vars (toInteger $ length subExprs) $ \vars
+          withNForalls vars (toInteger numPreds) $ \vars
             --TODO only do clauses for undefined function vars
            -> do
-            predClauses <- forM subExprs functionDomainClause
+            -- predClauses <- forM subExprs functionDomainClause
             isValidDomain <- validDomain
             funClauses <- forM funs funClause
             let singleFunClause = andAll funClauses
             -- return $ isValidDomain ==> singleFunClause
-            return $ (isValidDomain ==> (andAll predClauses)) /\ singleFunClause
+            return $ (isValidDomain ==> singleFunClause)
             -- enumClauses <- enumeratedDomainClauses funPairs
+        constClauses <- (fmap Maybe.catMaybes) $ forM funs constClause 
         return
           ( funDomPreds
-          , andAll $ boolDomPredList ++ posConstrPreds
-          , negConstrPreds)
+          , andAll $ posConstrPreds {- ++ boolDomPredList -} 
+          , constClauses ++ negConstrPreds)
   let ((funDomPreds, boolDomPreds, negPreds), state) = runState comp state0
   --Declare our domain function and its subfunctions
-  putStrLn "Declaring domain"
+  log "Declaring domain"
   declareDomain s numPreds bvType boolDomPreds boolDomArgName
   --Declare or define the functions for each constructor in our Herbrand universe
-  putStrLn "Declaring constructors"
+  log "Declaring constructors"
   declareOrDefineFuns s numPreds bvType state eqClasses
   --Declare functions that determines if a production is valid
   -- declareProdFuncions s numPreds bvType funs theMaxArity
   --Declare our existential variables
-  putStrLn "Declaring existentials"
+  log "Declaring existentials"
   forM_ (existentialVars state) $ \v -> do
     declareVec s v bvType
-    --Assert that each existential variable is in our domain
-    SMT.assert s $ domain $$$ [nameToBits numPreds v]
   --Assert the properties of each existential variable
-  putStrLn "Assert existential properties"
+  log "Assert existential properties"
   forM_ negPreds $ SMT.assert s
   --Assert our domain properties
-  putStrLn "Asserting function domain properties"
+  log "Asserting function domain properties"
   SMT.assert s funDomPreds
-  putStrLn "About do check SAT"
+  log "About do check SAT"
+  log ";;;;;;;;END OF SMT FILE"
   result <- SMT.check s
   --TODO minimize?
   case result of
     SMT.Sat ->
       printAndReturnResult s options numPreds bvType state funs allFreeVars
-    SMT.Unsat -> return $ Left clist --TODO niminize lemma
+    SMT.Unsat -> return $ Left [] --TODO put something useful here
     SMT.Unknown -> error "Failed to solve quanitification"
 
 printAndReturnResult ::
@@ -419,7 +436,7 @@ printAndReturnResult ::
   -> [SExpr]
   -> PredNumConfig
   -> [VecFun]
-  -> [Expr]
+  -> [PredExpr]
   -> IO (Either a b)
 printAndReturnResult s options numPreds bvType state funs allFreeVars
   -- SMT.command s $ SMT.List [SMT.Atom "get-model"]
@@ -427,13 +444,13 @@ printAndReturnResult s options numPreds bvType state funs allFreeVars
   case getModel options of
     True -> do
       domain <- enumerateDomain s numPreds bvType
-      putStrLn $ "DOMAIN: " ++ show domain
+      putStrLn $ ";;;; DOMAIN: " ++ show domain
       prodsFrom <- enumerateProductions s bvType funs
         --TODO do based on options
       forM_ prodsFrom $ \(from, f, to) ->
         putStrLn $ show from ++ "  ->  " ++ show f ++ show to
       forM_ allFreeVars $ \v -> do
         prods <- varProductions s v ((predNums state) Map.! v) numPreds
-        forM prods $ \prod -> putStrLn $ varName v ++ "  ->  " ++ (show prod)
+        forM prods $ \prod -> putStrLn $ ";;;; " ++ varName v ++ "  ->  " ++ (show prod)
     False -> return ()
   return $ Right $ error "TODO " --() --TODO return solution
